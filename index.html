@@ -1389,6 +1389,9 @@ const PLAY_ALIASES = {
   'hit':'single' // generic "hit" → single
 };
 
+let _dictLastProcessed = 0;
+let _dictLastCmd = '';
+
 function initDictation(){
   const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
   if(!SpeechRec){
@@ -1401,8 +1404,6 @@ function initDictation(){
   recognition.interimResults = true;
   recognition.maxAlternatives = 3;
 
-  let _lastProcessed = 0;
-  let _lastCmd = '';
   recognition.onresult = (e) => {
     let interim = '';
     let final = '';
@@ -1420,10 +1421,9 @@ function initDictation(){
     document.getElementById('dictation-transcript').textContent = '"' + (final||interim) + '"';
     if(final){
       const now = Date.now();
-      // Debounce: ignore duplicate commands within 1.5 seconds
-      if(final === _lastCmd && (now - _lastProcessed) < 1500){ return; }
-      _lastCmd = final;
-      _lastProcessed = now;
+      if(final === _dictLastCmd && (now - _dictLastProcessed) < 1500){ return; }
+      _dictLastCmd = final;
+      _dictLastProcessed = now;
       processDictation(final, allAlts);
     }
   };
@@ -1625,25 +1625,23 @@ function processDictation(text, alternatives){
     buildScoresheet(activeTeam);
     showDictationResult('✅ #' + jersey + ' Strike → ' + pl.innings[inn].strikes);
   } else if(cmd === 'run'){
-    // Always SET run=true when saying scored/score/scores; toggle with 'run'
-    const setTrue = (t.indexOf('scored') !== -1 || t.indexOf('score') !== -1);
-    pl.innings[inn].run = setTrue ? true : !pl.innings[inn].run;
-    // Directly update the DOM run button without full rebuild
-    const container = document.getElementById('scoresheet' + activeTeam);
-    if(container){
-      const rows = container.querySelectorAll('.player-row');
-      if(rows[pIdx]){
-        const btn = rows[pIdx].querySelector('.run-toggle');
-        if(btn){
-          btn.classList.toggle('scored', pl.innings[inn].run);
-        }
+    // Always SET to true (not toggle) to avoid double-fire reversal
+    pl.innings[inn].run = true;
+    // 1. Direct DOM update on the run button for this player row
+    const ssContainer = document.getElementById('scoresheet' + activeTeam);
+    if(ssContainer){
+      const allPlayerRows = Array.from(ssContainer.querySelectorAll('.player-row'));
+      if(allPlayerRows[pIdx]){
+        const rBtn = allPlayerRows[pIdx].querySelector('.run-toggle');
+        if(rBtn){ rBtn.className = 'run-toggle scored'; }
       }
     }
+    // 2. Update totals and score badge
     updateTotalsBar(activeTeam);
     refreshAllRunColors(activeTeam);
     updateScoreBadges();
     save();
-    showDictationResult('✅ #' + jersey + ' Run ' + (pl.innings[inn].run ? '✓' : '✗'));
+    showDictationResult('✅ #' + jersey + ' scored a Run!');
   } else {
     pl.innings[inn].play = (pl.innings[inn].play === cmd) ? '' : cmd;
     buildScoresheet(activeTeam); updateTotalsBar(activeTeam);
