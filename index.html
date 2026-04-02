@@ -1621,7 +1621,8 @@ function processDictation(text, alternatives){
     showDictationResult('✅ #' + jersey + ' Strike → ' + pl.innings[inn].strikes);
   } else if(cmd === 'run'){
     pl.innings[inn].run = !pl.innings[inn].run;
-    updateTotalsBar(activeTeam); refreshAllRunColors(activeTeam);
+    buildScoresheet(activeTeam); updateTotalsBar(activeTeam); refreshAllRunColors(activeTeam);
+    save();
     showDictationResult('✅ #' + jersey + ' Run ' + (pl.innings[inn].run ? '✓' : '✗'));
   } else {
     pl.innings[inn].play = (pl.innings[inn].play === cmd) ? '' : cmd;
