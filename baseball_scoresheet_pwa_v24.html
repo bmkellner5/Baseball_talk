@@ -1,0 +1,1596 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Scoresheet">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0a2240">
+<title>Baseball Scoresheet</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚾</text></svg>">
+<link rel="apple-touch-icon" id="appleIcon">
+<link rel="manifest" href="data:application/json;charset=utf-8,%7B%22name%22%3A%22Baseball%20Scoresheet%22%2C%22short_name%22%3A%22Scoresheet%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%231c1c1e%22%2C%22theme_color%22%3A%22%230a2240%22%2C%22orientation%22%3A%22portrait%22%7D">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text',sans-serif;
+  background:#1c1c1e;color:#f2f2f7;min-height:100vh;
+  padding-top:env(safe-area-inset-top);
+  padding-bottom:calc(60px + env(safe-area-inset-bottom));
+  padding-left:env(safe-area-inset-left);
+  padding-right:env(safe-area-inset-right);
+}
+
+/* ── Header ── */
+header{
+  background:linear-gradient(135deg,#1a3a5c,#0a2240);
+  padding:12px 16px 8px;border-bottom:2px solid #f5a623;
+}
+.header-top{display:flex;align-items:center;justify-content:space-between;}
+header h1{font-size:20px;font-weight:700;color:#f5a623;}
+.score-display{display:flex;align-items:center;gap:6px;}
+.score-badge{border-radius:8px;padding:4px 10px;font-size:20px;font-weight:800;min-width:40px;text-align:center;}
+.score-badge.home{background:#1a3a5c;color:#f5a623;border:1.5px solid #f5a623;}
+.score-badge.away{background:#3a1a1a;color:#e74c3c;border:1.5px solid #e74c3c;}
+.score-sep{font-size:18px;font-weight:800;color:#636366;}
+.header-sub{font-size:11px;color:#8e8e93;margin-top:4px;text-align:center;}
+
+/* ── Install Banner ── */
+#installBanner{
+  display:none;background:#1a3a5c;border-bottom:1px solid #f5a623;
+  padding:8px 14px;font-size:11px;color:#f2f2f7;text-align:center;line-height:1.6;
+}
+#installBanner strong{color:#f5a623;}
+#installBanner button{
+  margin-top:4px;background:#f5a623;border:none;border-radius:6px;
+  color:#1c1c1e;font-size:11px;font-weight:700;padding:4px 12px;cursor:pointer;
+}
+
+/* ── Game Info ── */
+.game-info{
+  background:#2c2c2e;margin:10px 12px 0;border-radius:12px;
+  padding:10px 14px;display:grid;grid-template-columns:1fr 1fr;gap:8px;
+}
+.game-info input,.game-info input[type="date"]{
+  background:#3a3a3c;border:1px solid #48484a;border-radius:8px;
+  padding:8px 10px;color:#f2f2f7;font-size:13px;width:100%;
+  -webkit-appearance:none;appearance:none;
+}
+.game-info input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(1);opacity:0.6;}
+.game-info input::placeholder{color:#636366;}
+
+/* ── Bottom Nav ── */
+.bottom-nav{
+  position:fixed;bottom:0;left:0;right:0;
+  background:#1c1c1e;border-top:1px solid #3a3a3c;
+  display:flex;padding-bottom:env(safe-area-inset-bottom);
+  z-index:50;
+}
+.nav-btn{
+  flex:1;padding:10px 4px 8px;border:none;background:transparent;
+  color:#636366;font-size:10px;font-weight:600;cursor:pointer;
+  display:flex;flex-direction:column;align-items:center;gap:2px;
+  transition:color 0.15s;
+}
+.nav-btn .nav-icon{font-size:20px;}
+.nav-btn.active{color:#f5a623;}
+
+/* ── Pages ── */
+.page{display:none;padding:0 12px;}
+.page.active{display:block;}
+
+/* ── Inning Selector ── */
+.inning-selector{
+  display:flex;align-items:center;margin:10px 0 0;
+  background:#2c2c2e;border-radius:12px;padding:10px 14px;gap:10px;
+}
+.inning-selector label{font-size:12px;color:#8e8e93;font-weight:600;white-space:nowrap;}
+.inning-btns{display:flex;gap:5px;flex:1;}
+.inn-btn{
+  flex:1;padding:8px 2px;border:1.5px solid #48484a;border-radius:8px;
+  background:#3a3a3c;color:#8e8e93;font-size:13px;font-weight:700;
+  cursor:pointer;text-align:center;transition:all 0.15s;
+  -webkit-tap-highlight-color:transparent;
+}
+.inn-btn.active{background:#1a3a5c;border-color:#f5a623;color:#f5a623;}
+
+/* ── Team mini-tabs (inside pages) ── */
+.team-tabs{
+  display:flex;margin:10px 0 0;border-radius:10px;overflow:hidden;background:#2c2c2e;
+}
+.team-tab-btn{
+  flex:1;padding:9px;border:none;background:transparent;
+  color:#8e8e93;font-size:13px;font-weight:600;cursor:pointer;transition:all 0.2s;
+}
+.team-tab-btn.active{background:#f5a623;color:#1c1c1e;border-radius:10px;}
+.team-pane{display:none;}
+.team-pane.active{display:block;}
+
+.team-name-row{display:flex;align-items:center;gap:10px;margin:8px 0;}
+.team-name-row input{
+  flex:1;background:#2c2c2e;border:1px solid #48484a;border-radius:8px;
+  padding:8px 12px;color:#f5a623;font-size:15px;font-weight:700;
+}
+
+/* ── Player Table ── */
+.player-table{background:#2c2c2e;border-radius:12px;overflow:hidden;margin-bottom:12px;}
+.row-grid{
+  display:grid;
+  grid-template-columns:26px 1fr 32px 44px 28px 68px 68px 28px;
+  align-items:center;gap:3px;padding:4px 6px;
+}
+.table-header{background:#1a3a5c;font-size:9px;font-weight:700;color:#f5a623;border-bottom:2px solid #f5a623;}
+.table-header>div{text-align:center;}
+.table-header .lbl{text-align:left;}
+.player-row{border-bottom:1px solid #3a3a3c;}
+.player-row:last-child{border-bottom:none;}
+.player-row:nth-child(even){background:#252527;}
+.player-num{font-size:11px;color:#8e8e93;text-align:center;font-weight:600;}
+.jersey-input{
+  background:#3a3a3c;border:1px solid #48484a;border-radius:5px;
+  color:#f5a623;font-size:11px;font-weight:800;text-align:center;
+  padding:1px;width:100%;min-height:24px;
+}
+.jersey-input:focus{outline:none;border-color:#f5a623;}
+.pitcher-jersey-cell{
+  background:#2c2c2e;border:1px solid #9b59b6;border-radius:4px;
+  color:#9b59b6;font-size:10px;font-weight:700;text-align:center;
+  padding:1px;width:100%;min-height:22px;
+}
+.pitcher-jersey-cell:focus{outline:none;border-color:#a569bd;}
+.player-name-input{
+  background:transparent;border:none;border-bottom:1px solid #3a3a3c;
+  color:#f2f2f7;font-size:11px;padding:1px 3px;width:100%;
+}
+.player-name-input:focus{outline:none;border-bottom-color:#f5a623;}
+.pos-input{
+  background:#3a3a3c;border:1px solid #48484a;border-radius:4px;
+  color:#f5a623;font-size:10px;font-weight:700;text-align:center;padding:1px;width:100%;
+}
+.pos-input:focus{outline:none;border-color:#f5a623;}
+.play-cell{
+  background:#3a3a3c;border:1px solid #48484a;border-radius:5px;
+  min-height:26px;display:flex;align-items:center;justify-content:center;
+  cursor:pointer;font-size:11px;font-weight:800;color:#636366;
+  -webkit-tap-highlight-color:transparent;transition:all 0.15s;
+}
+.play-cell.single{background:#1e5c2e;border-color:#2ecc71;color:#2ecc71;}
+.play-cell.double{background:#5c4e00;border-color:#f1c40f;color:#f1c40f;}
+.play-cell.triple{background:#0d2e5c;border-color:#3498db;color:#3498db;}
+.play-cell.homerun{background:#3a3a3a;border-color:#ecf0f1;color:#ecf0f1;}
+.play-cell.out{background:#5c1e1e;border-color:#e74c3c;color:#e74c3c;}
+.play-cell.walk{background:#3a3a1e;border-color:#f5a623;color:#f5a623;}
+.play-cell.strikeout{background:#4a1e5c;border-color:#9b59b6;color:#9b59b6;}
+.play-cell.error{background:#5c3a1e;border-color:#e67e22;color:#e67e22;}
+.run-toggle{
+  background:#2c2c2e;border:1.5px solid #48484a;border-radius:5px;
+  min-height:26px;display:flex;align-items:center;justify-content:center;
+  cursor:pointer;font-size:10px;font-weight:800;color:#48484a;
+  transition:all 0.15s;-webkit-tap-highlight-color:transparent;user-select:none;
+}
+.run-toggle.scored{background:#1e3a5c;border-color:#3498db;color:#3498db;}
+.run-toggle.scored-mercy{background:#5c1e1e;border-color:#e74c3c;color:#e74c3c;font-weight:900;}
+.run-toggle.mercy-inning{border-color:#e74c3c;color:#48484a;}
+.pitch-counter{display:flex;align-items:center;justify-content:center;gap:3px;}
+.pc-btn{
+  width:20px;height:26px;border-radius:5px;border:1.5px solid #48484a;
+  background:#3a3a3c;color:#f2f2f7;font-size:14px;font-weight:700;
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;-webkit-tap-highlight-color:transparent;user-select:none;flex-shrink:0;
+}
+.pc-btn:active{background:#555;}
+.pc-val{min-width:18px;text-align:center;font-size:11px;font-weight:700;color:#3498db;}
+.ab-cell{text-align:center;font-size:12px;font-weight:700;color:#f5a623;}
+.totals-bar{
+  background:#1a3a5c;border-top:2px solid #f5a623;padding:8px 10px;
+  display:grid;grid-template-columns:repeat(5,1fr);gap:4px;
+}
+.tot-item{background:#0a2240;border-radius:6px;padding:5px 4px;text-align:center;}
+.tot-label{font-size:9px;color:#8e8e93;text-transform:uppercase;letter-spacing:0.5px;}
+.tot-val{font-size:16px;font-weight:800;margin-top:1px;}
+.tot-val.runs{color:#3498db;}.tot-val.hits{color:#2ecc71;}
+.tot-val.walks{color:#f5a623;}.tot-val.pitches{color:#9b59b6;}
+
+/* ── Pitchers Page ── */
+.pitchers-team-tabs{display:flex;margin:10px 0 0;border-radius:10px;overflow:hidden;background:#2c2c2e;}
+.pitchers-team-tab{
+  flex:1;padding:9px;border:none;background:transparent;
+  color:#8e8e93;font-size:13px;font-weight:600;cursor:pointer;transition:all 0.2s;
+}
+.pitchers-team-tab.active{background:#f5a623;color:#1c1c1e;border-radius:10px;}
+.pitchers-pane{display:none;}
+.pitchers-pane.active{display:block;}
+
+.pitcher-card{
+  background:#2c2c2e;border-radius:12px;margin-top:10px;overflow:hidden;
+}
+.pitcher-header{
+  background:#1a3a5c;padding:8px 12px;display:flex;align-items:center;gap:10px;
+  border-bottom:1px solid #0a2240;
+}
+.pitcher-num-badge{
+  background:#f5a623;color:#1c1c1e;border-radius:6px;
+  font-size:12px;font-weight:800;padding:2px 8px;min-width:30px;text-align:center;
+}
+.pitcher-name-input{
+  flex:1;background:transparent;border:none;border-bottom:1px solid #48484a;
+  color:#f2f2f7;font-size:14px;font-weight:600;padding:2px 4px;
+}
+.pitcher-name-input:focus{outline:none;border-bottom-color:#f5a623;}
+.pitcher-innings-grid{
+  display:grid;grid-template-columns:repeat(6,1fr);gap:0;
+}
+.pitcher-inn-cell{
+  padding:6px 4px;border-right:1px solid #3a3a3c;border-bottom:1px solid #3a3a3c;
+}
+.pitcher-inn-cell:last-child{border-right:none;}
+.pitcher-inn-label{font-size:9px;color:#8e8e93;text-align:center;margin-bottom:4px;font-weight:700;}
+.bs-row{display:flex;gap:3px;justify-content:center;}
+.bs-counter{display:flex;flex-direction:column;align-items:center;gap:2px;}
+.bs-label{font-size:8px;font-weight:700;}
+.bs-label.b{color:#2ecc71;}.bs-label.s{color:#e74c3c;}
+.bs-ctrl{display:flex;align-items:center;gap:2px;}
+.bs-btn{
+  width:18px;height:18px;border-radius:4px;border:1px solid #48484a;
+  background:#3a3a3c;color:#f2f2f7;font-size:12px;font-weight:700;
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;-webkit-tap-highlight-color:transparent;user-select:none;
+}
+.bs-btn:active{background:#555;}
+.bs-val{font-size:11px;font-weight:800;min-width:14px;text-align:center;}
+.bs-val.bv{color:#2ecc71;}.bs-val.sv{color:#e74c3c;}
+.pitcher-totals-row{
+  display:grid;grid-template-columns:repeat(3,1fr);gap:0;
+  background:#0a2240;border-top:1px solid #f5a623;
+}
+.pt-cell{padding:6px 4px;text-align:center;border-right:1px solid #1a3a5c;}
+.pt-cell:last-child{border-right:none;}
+.pt-cell-label{font-size:9px;color:#8e8e93;}
+.pt-cell-val{font-size:14px;font-weight:800;}
+.pt-cell-val.b{color:#2ecc71;}.pt-cell-val.s{color:#e74c3c;}.pt-cell-val.p{color:#9b59b6;}
+
+/* ── Game Summary Page ── */
+.game-summary{margin-top:10px;}
+.summary-section{background:#2c2c2e;border-radius:12px;margin-bottom:12px;overflow:hidden;}
+.summary-title{
+  background:#1a3a5c;padding:8px 14px;font-size:13px;font-weight:700;color:#f5a623;
+  border-bottom:2px solid #f5a623;
+}
+/* Linescore */
+.linescore{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+.linescore-table{width:100%;border-collapse:collapse;min-width:360px;}
+.linescore-table th,.linescore-table td{
+  padding:7px 6px;text-align:center;font-size:12px;border-bottom:1px solid #3a3a3c;
+}
+.linescore-table th{background:#0a2240;color:#f5a623;font-size:10px;}
+.linescore-table td.team-name-cell{text-align:left;padding-left:10px;font-weight:700;}
+.linescore-table td.total-cell{font-weight:800;font-size:14px;background:#0a2240;}
+.linescore-table td.home-color{color:#f5a623;}.linescore-table td.away-color{color:#e74c3c;}
+.linescore-table tr.home-row td{border-bottom:1px solid #1a3a5c;}
+
+/* Per-inning detail */
+.inning-detail{padding:10px;}
+.inn-detail-row{margin-bottom:10px;}
+.inn-detail-title{font-size:11px;font-weight:700;color:#f5a623;margin-bottom:6px;padding:4px 8px;background:#1a3a5c;border-radius:6px;}
+.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;}
+.detail-team-box{background:#3a3a3c;border-radius:8px;padding:6px 8px;}
+.detail-team-label{font-size:9px;color:#8e8e93;font-weight:700;margin-bottom:4px;}
+.detail-stat-row{display:flex;justify-content:space-between;font-size:11px;margin-bottom:2px;}
+.detail-stat-row span:first-child{color:#8e8e93;}
+.detail-stat-row span:last-child{font-weight:700;}
+
+/* ── Legend ── */
+.legend{
+  margin:0 0 12px;background:#2c2c2e;border-radius:10px;
+  padding:9px 12px;display:flex;flex-wrap:wrap;gap:8px;
+}
+.legend-item{display:flex;align-items:center;gap:4px;font-size:11px;color:#8e8e93;}
+.legend-dot{width:10px;height:10px;border-radius:2px;border:1.5px solid;}
+
+/* ── Reset ── */
+.reset-btn{
+  width:100%;padding:12px;background:#5c1e1e;border:1.5px solid #e74c3c;
+  border-radius:10px;color:#e74c3c;font-size:15px;font-weight:700;cursor:pointer;
+  margin-bottom:12px;
+}
+
+/* ── Modal ── */
+.modal-overlay{
+  display:none;position:fixed;top:0;left:0;right:0;bottom:0;
+  background:rgba(0,0,0,0.75);z-index:100;justify-content:center;align-items:flex-end;
+}
+.modal-overlay.open{display:flex;}
+.modal{
+  background:#2c2c2e;border-radius:16px 16px 0 0;
+  padding:20px 16px calc(28px + env(safe-area-inset-bottom));
+  width:100%;max-width:500px;
+}
+.modal h3{font-size:15px;font-weight:700;margin-bottom:14px;color:#f5a623;text-align:center;}
+.modal-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px;}
+.modal-btn{
+  padding:14px 6px;border-radius:10px;border:2px solid transparent;
+  font-size:13px;font-weight:700;cursor:pointer;text-align:center;
+}
+.modal-btn.single{background:#1e5c2e;border-color:#2ecc71;color:#2ecc71;}
+.modal-btn.double{background:#5c4e00;border-color:#f1c40f;color:#f1c40f;}
+.modal-btn.triple{background:#0d2e5c;border-color:#3498db;color:#3498db;}
+.modal-btn.homerun{background:#3a3a3a;border-color:#ecf0f1;color:#ecf0f1;}
+.modal-btn.out{background:#5c1e1e;border-color:#e74c3c;color:#e74c3c;}
+.modal-btn.walk{background:#3a3a1e;border-color:#f5a623;color:#f5a623;}
+.modal-btn.strikeout{background:#4a1e5c;border-color:#9b59b6;color:#9b59b6;}
+.modal-btn.error{background:#5c3a1e;border-color:#e67e22;color:#e67e22;}
+.modal-btn.clear{background:#3a3a3c;border-color:#636366;color:#f2f2f7;}
+.modal-cancel{
+  width:100%;padding:13px;background:#3a3a3c;border:none;
+  border-radius:10px;color:#f2f2f7;font-size:15px;font-weight:600;cursor:pointer;
+}
+
+/* ── Swap Button ── */
+.swap-bar{
+  display:flex;gap:8px;margin-bottom:8px;align-items:center;
+}
+.swap-btn{
+  flex:1;padding:10px;background:#2c2c2e;border:1.5px solid #48484a;
+  border-radius:10px;color:#8e8e93;font-size:13px;font-weight:700;cursor:pointer;
+  transition:all 0.2s;text-align:center;
+}
+.swap-btn.active{background:#1a3a5c;border-color:#f5a623;color:#f5a623;}
+.swap-cancel-btn{
+  padding:10px 14px;background:#5c1e1e;border:1.5px solid #e74c3c;
+  border-radius:10px;color:#e74c3c;font-size:13px;font-weight:700;cursor:pointer;
+  display:none;
+}
+.swap-cancel-btn.visible{display:block;}
+.swap-hint{
+  font-size:11px;color:#f5a623;text-align:center;padding:6px 10px;
+  background:#1a3a5c;border-radius:8px;margin-bottom:8px;display:none;
+}
+.swap-hint.visible{display:block;}
+/* Jersey swap mode */
+.jersey-input.swap-lock{
+  background:#1a3a5c;border-color:#f5a623;color:#f5a623;
+  cursor:pointer;pointer-events:auto;font-size:13px;
+}
+.jersey-input.swap-first{
+  background:#f5a623;border-color:#f5a623;color:#1c1c1e;
+}
+.jersey-input.swap-lock:active{background:#0a2240;}
+
+/* ── Save Button ── */
+.save-btn{
+  width:100%;padding:12px;background:#1a3a5c;border:1.5px solid #f5a623;
+  border-radius:10px;color:#f5a623;font-size:15px;font-weight:700;cursor:pointer;
+  margin-bottom:8px;display:flex;align-items:center;justify-content:center;gap:8px;
+}
+.save-btn:active{background:#0a2240;}
+
+/* ── Away team table header red ── */
+#page-away .table-header{background:#5c1e1e !important;border-bottom-color:#e74c3c !important;}
+#page-away .table-header>div{color:#e74c3c !important;}
+
+/* ── Dictation ── */
+#nav-mic.recording { color:#e74c3c; }
+#nav-mic.recording #mic-icon { animation: pulse-mic 0.8s ease-in-out infinite; }
+@keyframes pulse-mic {
+  0%,100%{transform:scale(1);}
+  50%{transform:scale(1.25);}
+}
+</style>
+</head>
+<body>
+
+<div id="installBanner">
+  <strong>📲 Add to Home Screen</strong> — Tap Share → "Add to Home Screen"
+  <br><button onclick="document.getElementById('installBanner').style.display='none'">Got it ✓</button>
+</div>
+
+<header>
+  <div class="header-top">
+    <h1>⚾ Scoresheet</h1>
+    <div class="score-display">
+      <div class="score-badge home" id="scoreHome">0</div>
+      <div class="score-sep">-</div>
+      <div class="score-badge away" id="scoreAway">0</div>
+    </div>
+  </div>
+  <div class="header-sub" id="headerSub">Home vs Away</div>
+</header>
+
+<!-- Game Info (always visible) -->
+<div style="padding:0 12px;">
+  <div class="game-info">
+    <input type="date" id="gameDate" />
+    <input type="text" id="gameLocation" placeholder="📍 Venue" />
+  </div>
+</div>
+
+<!-- ── HOME TEAM PAGE ── -->
+<div class="page active" id="page-home">
+  <div class="inning-selector">
+    <label>Inning:</label>
+    <div class="inning-btns" id="inningBtnsHome"></div>
+  </div>
+  <div class="team-name-row" style="margin-top:10px;">
+    <input type="text" placeholder="Home Team Name" id="teamName0" />
+  </div>
+  <div class="swap-bar" id="swapBar0">
+    <button class="swap-btn" id="swapBtn0" onclick="toggleSwapMode(0)">🔀 Swap Batting Order</button>
+    <button class="swap-cancel-btn" id="swapCancelBtn0" onclick="cancelSwap(0)">✖ Cancel</button>
+  </div>
+  <div class="swap-hint" id="swapHint0">Tap the first player to swap, then tap the second.</div>
+  <div class="player-table" id="scoresheet0"></div>
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:#1e5c2e;border-color:#2ecc71"></div>1B Single</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#5c4e00;border-color:#f1c40f"></div>2B Double</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#0d2e5c;border-color:#3498db"></div>3B Triple</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#3a3a3a;border-color:#ecf0f1"></div>HR Homer</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#5c1e1e;border-color:#e74c3c"></div>Out</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#4a1e5c;border-color:#9b59b6"></div>K</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#3a3a1e;border-color:#f5a623"></div>BB</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#1e3a5c;border-color:#3498db"></div>Run</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#5c3a1e;border-color:#e67e22"></div>Error</div>
+  </div>
+</div>
+
+<!-- ── AWAY TEAM PAGE ── -->
+<div class="page" id="page-away">
+  <div class="inning-selector">
+    <label>Inning:</label>
+    <div class="inning-btns" id="inningBtnsAway"></div>
+  </div>
+  <div class="team-name-row" style="margin-top:10px;">
+    <input type="text" placeholder="Away Team Name" id="teamName1" />
+  </div>
+  <div class="swap-bar" id="swapBar1">
+    <button class="swap-btn" id="swapBtn1" onclick="toggleSwapMode(1)">🔀 Swap Batting Order</button>
+    <button class="swap-cancel-btn" id="swapCancelBtn1" onclick="cancelSwap(1)">✖ Cancel</button>
+  </div>
+  <div class="swap-hint" id="swapHint1">Tap the first player to swap, then tap the second.</div>
+  <div class="player-table" id="scoresheet1"></div>
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:#1e5c2e;border-color:#2ecc71"></div>1B Single</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#5c4e00;border-color:#f1c40f"></div>2B Double</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#0d2e5c;border-color:#3498db"></div>3B Triple</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#3a3a3a;border-color:#ecf0f1"></div>HR Homer</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#5c1e1e;border-color:#e74c3c"></div>Out</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#4a1e5c;border-color:#9b59b6"></div>K</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#3a3a1e;border-color:#f5a623"></div>BB</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#1e3a5c;border-color:#3498db"></div>Run</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#5c3a1e;border-color:#e67e22"></div>Error</div>
+  </div>
+</div>
+
+<!-- ── PITCHERS PAGE ── -->
+<div class="page" id="page-pitchers">
+  <div class="pitchers-team-tabs">
+    <button class="pitchers-team-tab active" onclick="switchPitcherTeam(0)">🔵 Home Pitchers</button>
+    <button class="pitchers-team-tab" onclick="switchPitcherTeam(1)">🔴 Away Pitchers</button>
+  </div>
+  <div class="pitchers-pane active" id="pitchers-pane-0"></div>
+  <div class="pitchers-pane" id="pitchers-pane-1"></div>
+</div>
+
+<!-- ── GAME SUMMARY PAGE ── -->
+<div class="page" id="page-game">
+  <div class="game-summary" id="gameSummary"></div>
+  <button class="save-btn" onclick="saveToFile()">💾 Save Scoresheet to File</button>
+<button class="reset-btn" onclick="confirmReset()">🗑️ Reset Scoresheet</button>
+</div>
+
+<!-- Dictation Toast -->
+<div id="dictation-toast" style="
+  display:none;position:fixed;bottom:80px;left:50%;transform:translateX(-50%);
+  background:#1c1c1e;border:1.5px solid #48484a;border-radius:14px;
+  padding:10px 18px;z-index:9999;min-width:260px;max-width:90vw;
+  box-shadow:0 8px 32px rgba(0,0,0,0.6);text-align:center;
+">
+  <div id="dictation-status" style="font-size:13px;color:#f2f2f7;font-weight:600;margin-bottom:4px;">🎙️ Listening...</div>
+  <div id="dictation-transcript" style="font-size:11px;color:#8e8e93;min-height:16px;font-style:italic;"></div>
+  <div id="dictation-result" style="font-size:11px;color:#2ecc71;min-height:16px;margin-top:2px;font-weight:700;"></div>
+</div>
+
+<!-- Bottom Nav -->
+<nav class="bottom-nav">
+  <button class="nav-btn active" id="nav-home" onclick="switchPage('home')">
+    <span class="nav-icon">🔵</span>Home
+  </button>
+  <button class="nav-btn" id="nav-away" onclick="switchPage('away')">
+    <span class="nav-icon">🔴</span>Away
+  </button>
+  <button class="nav-btn" id="nav-pitchers" onclick="switchPage('pitchers')">
+    <span class="nav-icon">⚾</span>Pitchers
+  </button>
+  <button class="nav-btn" id="nav-game" onclick="switchPage('game')">
+    <span class="nav-icon">📋</span>Game
+  </button>
+  <button class="nav-btn" id="nav-mic" onclick="toggleDictation()" aria-label="Voice dictation">
+    <span class="nav-icon" id="mic-icon">🎙️</span><span id="mic-label">Voice</span>
+  </button>
+</nav>
+
+<!-- Play Modal -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <h3 id="modalTitle">Record Play</h3>
+    <div class="modal-grid">
+      <button class="modal-btn single"    onclick="selectPlay('single')">🟢 Single</button>
+      <button class="modal-btn double"    onclick="selectPlay('double')">🟢 Double</button>
+      <button class="modal-btn triple"    onclick="selectPlay('triple')">🟢 Triple</button>
+      <button class="modal-btn homerun"   onclick="selectPlay('homerun')">🌟 Home Run</button>
+      <button class="modal-btn out"       onclick="selectPlay('out')">🔴 Out</button>
+      <button class="modal-btn strikeout" onclick="selectPlay('strikeout')">🟣 K</button>
+      <button class="modal-btn walk"      onclick="selectPlay('walk')">🟡 Walk</button>
+      <button class="modal-btn error"     onclick="selectPlay('error')">🟠 Error</button>
+      <button class="modal-btn clear"     onclick="selectPlay('')">✖ Clear</button>
+    </div>
+    <button class="modal-cancel" onclick="closeModal()">Cancel</button>
+  </div>
+</div>
+
+<script>
+// ── Apple icon ────────────────────────────────────────────────────────────
+(function(){
+  try{
+    const c=document.createElement('canvas');c.width=180;c.height=180;
+    const x=c.getContext('2d');x.fillStyle='#0a2240';x.fillRect(0,0,180,180);
+    x.font='120px serif';x.textAlign='center';x.textBaseline='middle';x.fillText('⚾',90,95);
+    document.getElementById('appleIcon').href=c.toDataURL('image/png');
+  }catch(e){}
+})();
+if(!window.navigator.standalone) document.getElementById('installBanner').style.display='block';
+if('serviceWorker' in navigator){
+  const sw=`const C='ss-v3';self.addEventListener('install',e=>self.skipWaiting());self.addEventListener('fetch',e=>{e.respondWith(caches.open(C).then(cache=>cache.match(e.request).then(r=>{if(r)return r;return fetch(e.request).then(res=>{cache.put(e.request,res.clone());return res;}).catch(()=>r);})));});`;
+  navigator.serviceWorker.register(URL.createObjectURL(new Blob([sw],{type:'application/javascript'}))).catch(()=>{});
+}
+
+// ── Constants ─────────────────────────────────────────────────────────────
+const INNINGS=6,PLAYERS=12,PITCHERS=6;
+let activeInning=[0,0]; // per team
+let pendingCell=null;
+let swapMode=false;
+let swapTeam=-1;
+let swapFirst=-1; // first player index selected
+const playLabels={single:'1B',double:'2B',triple:'3B',homerun:'HR',out:'O',walk:'BB',strikeout:'K',error:'E','':''};
+function isHit(p){return p==='single'||p==='double'||p==='triple'||p==='homerun';}
+
+// ── State ─────────────────────────────────────────────────────────────────
+function freshPlayer(num){
+  return{jersey:num!==undefined?String(num):'',name:'',pos:'',innings:Array.from({length:INNINGS},()=>({play:'',run:false,balls:0,strikes:0,pitcherJersey:''}))};
+}
+function freshPitcher(){
+  return{jersey:'',name:'',innings:Array.from({length:INNINGS},()=>({balls:0,strikes:0}))};
+}
+const state={
+  teams:[
+    Array.from({length:PLAYERS},(_,i)=>freshPlayer(i+1)),
+    Array.from({length:PLAYERS},(_,i)=>freshPlayer(i+1))
+  ],
+  pitchers:[
+    Array.from({length:PITCHERS},freshPitcher),
+    Array.from({length:PITCHERS},freshPitcher)
+  ]
+};
+
+// ── Persist ───────────────────────────────────────────────────────────────
+function save(){
+  try{localStorage.setItem('bss3',JSON.stringify(state));}catch(e){}
+  saveInfo();
+}
+function saveInfo(){
+  try{
+    localStorage.setItem('bss3_info',JSON.stringify({
+      date:document.getElementById('gameDate').value,
+      loc:document.getElementById('gameLocation').value,
+      n0:document.getElementById('teamName0').value,
+      n1:document.getElementById('teamName1').value,
+    }));
+  }catch(e){}
+}
+function loadSaved(){
+  try{
+    const s=JSON.parse(localStorage.getItem('bss3'));
+    if(s&&s.teams){
+      for(let t=0;t<2;t++){
+        for(let p=0;p<PLAYERS;p++){
+          if(s.teams[t]&&s.teams[t][p]){
+            state.teams[t][p].jersey=s.teams[t][p].jersey!==undefined?String(s.teams[t][p].jersey):String(p+1);
+            state.teams[t][p].name=s.teams[t][p].name||'';
+            state.teams[t][p].pos=s.teams[t][p].pos||'';
+            for(let i=0;i<INNINGS;i++) if(s.teams[t][p].innings&&s.teams[t][p].innings[i]){
+              state.teams[t][p].innings[i].play=s.teams[t][p].innings[i].play||'';
+              state.teams[t][p].innings[i].run=s.teams[t][p].innings[i].run||false;
+              state.teams[t][p].innings[i].balls=s.teams[t][p].innings[i].balls||0;
+              state.teams[t][p].innings[i].strikes=s.teams[t][p].innings[i].strikes||0;
+              state.teams[t][p].innings[i].pitcherJersey=s.teams[t][p].innings[i].pitcherJersey||'';
+            }
+          }
+        }
+        for(let p=0;p<PITCHERS;p++){
+          if(s.pitchers&&s.pitchers[t]&&s.pitchers[t][p]){
+            state.pitchers[t][p].jersey=s.pitchers[t][p].jersey||'';
+            state.pitchers[t][p].name=s.pitchers[t][p].name||'';
+            for(let i=0;i<INNINGS;i++) if(s.pitchers[t][p].innings&&s.pitchers[t][p].innings[i]){
+              state.pitchers[t][p].innings[i].balls=s.pitchers[t][p].innings[i].balls||0;
+              state.pitchers[t][p].innings[i].strikes=s.pitchers[t][p].innings[i].strikes||0;
+            }
+          }
+        }
+      }
+    }
+    const gi=JSON.parse(localStorage.getItem('bss3_info')||'{}');
+    if(gi.date) document.getElementById('gameDate').value=gi.date;
+    if(gi.loc)  document.getElementById('gameLocation').value=gi.loc;
+    if(gi.n0)   document.getElementById('teamName0').value=gi.n0;
+    if(gi.n1)   document.getElementById('teamName1').value=gi.n1;
+  }catch(e){}
+}
+['gameDate','gameLocation','teamName0','teamName1'].forEach(id=>{
+  document.getElementById(id).addEventListener('input',()=>{saveInfo();updateHeaderSub();});
+});
+
+// ── Page Navigation ───────────────────────────────────────────────────────
+function switchPage(page){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('page-'+page).classList.add('active');
+  document.getElementById('nav-'+page).classList.add('active');
+  if(page==='game') buildGameSummary();
+  if(page==='pitchers') syncAllPitcherTotals();
+}
+
+// ── Inning Buttons ────────────────────────────────────────────────────────
+function buildInningBtns(team){
+  const id=team===0?'inningBtnsHome':'inningBtnsAway';
+  const wrap=document.getElementById(id);
+  wrap.innerHTML='';
+  for(let i=0;i<INNINGS;i++){
+    const btn=document.createElement('button');
+    btn.className='inn-btn'+(i===activeInning[team]?' active':'');
+    btn.textContent=i+1;
+    btn.addEventListener('click',()=>{
+      activeInning[team]=i;
+      document.querySelectorAll('#'+id+' .inn-btn').forEach((b,j)=>b.classList.toggle('active',j===i));
+      buildScoresheet(team);
+    });
+    wrap.appendChild(btn);
+  }
+}
+
+// ── Batter Counter Helper ────────────────────────────────────────────────
+// dotMax = how many dots to display; enforceMax = whether + is capped at dotMax
+function makeBatterCounter(team,p,inn,field,dotMax,color,enforceMax){
+  const wrap=document.createElement('div');
+  wrap.style.cssText='display:flex;flex-direction:column;align-items:center;gap:2px;';
+  // Dot indicators (always shows dotMax dots)
+  const dots=document.createElement('div');
+  dots.style.cssText='display:flex;gap:2px;justify-content:center;';
+  dots.id='dots-'+team+'-'+p+'-'+inn+'-'+field;
+  // Controls
+  const ctrl=document.createElement('div');
+  ctrl.style.cssText='display:flex;align-items:center;gap:2px;';
+  const minB=document.createElement('div');minB.className='pc-btn';minB.textContent='−';
+  minB.style.cssText='width:18px;height:20px;font-size:12px;border-color:'+color+';color:'+color+';';
+  const val=document.createElement('div');val.className='pc-val';
+  val.style.cssText='color:'+color+';min-width:14px;font-size:10px;';
+  val.textContent=state.teams[team][p].innings[inn][field]||0;
+  const plusB=document.createElement('div');plusB.className='pc-btn';plusB.textContent='+';
+  plusB.style.cssText='width:18px;height:20px;font-size:12px;border-color:'+color+';color:'+color+';';
+  function renderDots(){
+    dots.innerHTML='';
+    const cur=state.teams[team][p].innings[inn][field]||0;
+    for(let d=0;d<dotMax;d++){
+      const dot=document.createElement('div');
+      // First dotMax dots fill normally; if cur > dotMax show all filled + overflow indicator
+      const filled=d<Math.min(cur,dotMax);
+      dot.style.cssText='width:8px;height:8px;border-radius:50%;border:1.5px solid '+color+
+        ';background:'+(filled?color:'transparent')+';';
+      dots.appendChild(dot);
+    }
+    // If value exceeds dotMax, show a small "+N" overflow badge
+    const overflow=document.getElementById('ovf-'+team+'-'+p+'-'+inn+'-'+field);
+    if(overflow) overflow.remove();
+    if(cur>dotMax){
+      const ovf=document.createElement('div');
+      ovf.id='ovf-'+team+'-'+p+'-'+inn+'-'+field;
+      ovf.style.cssText='font-size:9px;font-weight:900;color:'+color+
+        ';background:rgba(0,0,0,0.4);border-radius:3px;padding:0 3px;margin-left:2px;white-space:nowrap;';
+      ovf.textContent='+'+(cur-dotMax);
+      dots.appendChild(ovf);
+    }
+  }
+  plusB.addEventListener('click',()=>{
+    const cur=state.teams[team][p].innings[inn][field]||0;
+    if(enforceMax&&cur>=dotMax) return; // balls still capped
+    state.teams[team][p].innings[inn][field]=cur+1;
+    val.textContent=state.teams[team][p].innings[inn][field];
+    renderDots();updateTotalsBar(team);syncAllPitcherTotals();save();
+  });
+  minB.addEventListener('click',()=>{
+    if((state.teams[team][p].innings[inn][field]||0)>0){
+      state.teams[team][p].innings[inn][field]--;
+      val.textContent=state.teams[team][p].innings[inn][field];
+      renderDots();updateTotalsBar(team);syncAllPitcherTotals();save();
+    }
+  });
+  renderDots();
+  ctrl.appendChild(minB);ctrl.appendChild(val);ctrl.appendChild(plusB);
+  wrap.appendChild(dots);wrap.appendChild(ctrl);
+  return wrap;
+}
+
+// ── Run Color Refresh ────────────────────────────────────────────────────
+function refreshRunColors(team,inn){
+  const runCount=state.teams[team].filter(pl=>pl.innings[inn].run).length;
+  const mercy=runCount>=5;
+  // Find all run toggles for this team/inning in the DOM
+  const container=document.getElementById('scoresheet'+team);
+  if(!container)return;
+  const rows=container.querySelectorAll('.player-row');
+  rows.forEach(row=>{
+    const runBtn=row.querySelector('.run-toggle');
+    if(!runBtn)return;
+    // Identify which player this row belongs to by its position
+    const allRows=Array.from(container.querySelectorAll('.player-row'));
+    const p=allRows.indexOf(row);
+    if(p<0||p>=PLAYERS)return;
+    const isScored=state.teams[team][p].innings[inn].run;
+    runBtn.classList.remove('scored','scored-mercy');
+    if(isScored){
+      runBtn.classList.add(mercy?'scored-mercy':'scored');
+    }
+    // Also tint unscored buttons red border when mercy active
+    runBtn.classList.toggle('mercy-inning',mercy&&!isScored);
+  });
+  // Update totals bar run color
+  const totEl=document.getElementById('totRuns-'+team);
+  if(totEl) totEl.style.color=mercy?'#e74c3c':'#3498db';
+}
+
+// ── Scoresheet ────────────────────────────────────────────────────────────
+function buildScoresheet(team){
+  const inn=activeInning[team];
+  const container=document.getElementById('scoresheet'+team);
+  container.innerHTML='';
+  const hdr=document.createElement('div');
+  hdr.className='row-grid table-header';
+  hdr.innerHTML='<div style="color:#8e8e93;font-size:10px">#</div><div class="lbl">Player</div><div>Pos</div><div>Play</div><div>R</div><div style="text-align:center;color:#2ecc71">Balls</div><div style="text-align:center;color:#e74c3c">Strikes</div><div style="text-align:center;color:#9b59b6;font-size:10px" title="Opposing pitcher jersey">Ptr#</div>';
+  container.appendChild(hdr);
+  for(let p=0;p<PLAYERS;p++){
+    const row=document.createElement('div');
+    row.className='row-grid player-row';
+    const numD=document.createElement('input');
+    numD.className='jersey-input';
+    numD.type='text';numD.maxLength=2;numD.placeholder='#';
+    numD.value=state.teams[team][p].jersey||'';
+    numD.addEventListener('input',e=>{state.teams[team][p].jersey=e.target.value;save();});
+    const nameIn=document.createElement('input');
+    nameIn.className='player-name-input';nameIn.placeholder='Player '+(p+1);
+    nameIn.value=state.teams[team][p].name;
+    nameIn.addEventListener('input',e=>{state.teams[team][p].name=e.target.value;save();});
+    const posIn=document.createElement('input');
+    posIn.className='pos-input';posIn.placeholder='POS';posIn.maxLength=3;
+    posIn.value=state.teams[team][p].pos;
+    posIn.addEventListener('input',e=>{state.teams[team][p].pos=e.target.value.toUpperCase();save();});
+    const playCell=document.createElement('div');
+    playCell.className='play-cell';
+    const play=state.teams[team][p].innings[inn].play;
+    if(play){playCell.classList.add(play);playCell.textContent=playLabels[play];}
+    else playCell.textContent='—';
+    playCell.addEventListener('click',()=>openModal(team,p));
+    const runBtn=document.createElement('div');
+    runBtn.className='run-toggle'+(state.teams[team][p].innings[inn].run?' scored':'');
+    runBtn.textContent='R';
+    runBtn.addEventListener('click',()=>{
+      state.teams[team][p].innings[inn].run=!state.teams[team][p].innings[inn].run;
+      runBtn.classList.toggle('scored',state.teams[team][p].innings[inn].run);
+      refreshRunColors(team,inn);
+      updateScoreBadges();save();
+    });
+    // Balls counter (max 4)
+    const ballsWrap=makeBatterCounter(team,p,inn,'balls',4,'#2ecc71',true);
+    // Strikes counter (max 3)
+    const strikesWrap=makeBatterCounter(team,p,inn,'strikes',3,'#e74c3c',false);
+
+    row.appendChild(numD);row.appendChild(nameIn);row.appendChild(posIn);
+    // Pitcher jersey input for this at-bat
+    const pjWrap=document.createElement('div');
+    pjWrap.style.cssText='display:flex;align-items:center;justify-content:center;';
+    const pjIn=document.createElement('input');
+    pjIn.type='text';pjIn.maxLength=2;pjIn.placeholder='#';
+    pjIn.className='pitcher-jersey-cell';
+    pjIn.value=state.teams[team][p].innings[inn].pitcherJersey||'';
+    pjIn.addEventListener('input',e=>{
+      state.teams[team][p].innings[inn].pitcherJersey=e.target.value;
+      syncAllPitcherTotals();
+      save();
+    });
+    pjWrap.appendChild(pjIn);
+    row.appendChild(playCell);row.appendChild(runBtn);row.appendChild(ballsWrap);row.appendChild(strikesWrap);row.appendChild(pjWrap);
+
+    container.appendChild(row);
+  }
+  const totBar=document.createElement('div');totBar.className='totals-bar';
+  ['Runs','Hits','Balls','Strikes','Pitches'].forEach(label=>{
+    const item=document.createElement('div');item.className='tot-item';
+    const key=label.toLowerCase();
+    const colorMap={Runs:'#3498db',Hits:'#2ecc71',Balls:'#2ecc71',Strikes:'#e74c3c',Pitches:'#9b59b6'};
+    item.innerHTML='<div class="tot-label">Inn '+(inn+1)+' '+label+'</div><div class="tot-val" style="color:'+colorMap[label]+'" id="tot'+label+'-'+team+'">0</div>';
+    totBar.appendChild(item);
+  });
+  container.appendChild(totBar);
+  updateTotalsBar(team);
+  refreshAllRunColors(team);
+  updatePtrColors(team);
+}
+
+function calcAB(team,p){return state.teams[team][p].innings.filter(x=>x.play!=='').length;}
+
+function updateTotalsBar(team){
+  const inn=activeInning[team];
+  let runs=0,hits=0,walks=0,balls=0,strikes=0;
+  state.teams[team].forEach(pl=>{
+    const i=pl.innings[inn];
+    if(i.run)runs++;
+    if(isHit(i.play))hits++;
+    if(i.play==='walk')walks++;
+    balls+=i.balls||0;
+    strikes+=i.strikes||0;
+  });
+  const set=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
+  set('totRuns-'+team,runs);set('totHits-'+team,hits);
+  set('totBalls-'+team,balls);set('totStrikes-'+team,strikes);
+  set('totPitches-'+team,balls+strikes);
+
+}
+
+function updateScoreBadges(){
+  let h=0,a=0;
+  state.teams[0].forEach(pl=>pl.innings.forEach(i=>{if(i.run)h++;}));
+  state.teams[1].forEach(pl=>pl.innings.forEach(i=>{if(i.run)a++;}));
+  document.getElementById('scoreHome').textContent=h;
+  document.getElementById('scoreAway').textContent=a;
+}
+function refreshAllRunColors(team){
+  for(let i=0;i<INNINGS;i++) refreshRunColors(team,i);
+}
+
+// ── Modal ─────────────────────────────────────────────────────────────────
+function openModal(team,player){
+  pendingCell={team,player};
+  const pname=state.teams[team][player].name||'Player '+(player+1);
+  document.getElementById('modalTitle').textContent=pname+' — Inning '+(activeInning[team]+1);
+  document.getElementById('modalOverlay').classList.add('open');
+}
+function selectPlay(play){
+  if(!pendingCell)return;
+  const{team,player}=pendingCell;
+  state.teams[team][player].innings[activeInning[team]].play=play;
+  save();buildScoresheet(team);closeModal();
+}
+function closeModal(){document.getElementById('modalOverlay').classList.remove('open');pendingCell=null;}
+document.getElementById('modalOverlay').addEventListener('click',function(e){if(e.target===this)closeModal();});
+
+// ── Pitchers Page ─────────────────────────────────────────────────────────
+let activePitcherTeam=0;
+function switchPitcherTeam(team){
+  activePitcherTeam=team;
+  document.querySelectorAll('.pitchers-team-tab').forEach((b,i)=>b.classList.toggle('active',i===team));
+  document.querySelectorAll('.pitchers-pane').forEach((p,i)=>p.classList.toggle('active',i===team));
+}
+
+function buildPitchersPage(){
+  [0,1].forEach(team=>buildPitcherPane(team));
+}
+
+function buildPitcherPane(team){
+  const container=document.getElementById('pitchers-pane-'+team);
+  container.innerHTML='';
+  for(let p=0;p<PITCHERS;p++){
+    const card=document.createElement('div');
+    card.className='pitcher-card';
+    card.dataset.team=team;
+    // Header row
+    const hdr=document.createElement('div');
+    hdr.className='pitcher-header';
+    if(team===1) hdr.style.cssText='background:#1a3a5c;border-bottom-color:#3498db;';
+    // Editable jersey number
+    const jerseyWrap=document.createElement('div');
+    jerseyWrap.style.cssText='display:flex;flex-direction:column;align-items:center;gap:1px;';
+    const jerseyLbl=document.createElement('div');
+    jerseyLbl.style.cssText='font-size:8px;color:#8e8e93;';jerseyLbl.textContent='#';
+    const jerseyIn=document.createElement('input');
+    jerseyIn.type='text';jerseyIn.maxLength=3;jerseyIn.placeholder='##';
+    const jColor='#f5a623';
+    jerseyIn.style.cssText='width:36px;background:#0a2240;border:1.5px solid '+jColor+';border-radius:6px;color:'+jColor+';font-size:14px;font-weight:800;text-align:center;padding:2px;';
+    jerseyIn.value=state.pitchers[team][p].jersey||'';
+    jerseyIn.addEventListener('input',e=>{state.pitchers[team][p].jersey=e.target.value;save();});
+    jerseyWrap.appendChild(jerseyLbl);jerseyWrap.appendChild(jerseyIn);
+    const nameIn=document.createElement('input');
+    nameIn.className='pitcher-name-input';nameIn.placeholder='Pitcher name';
+    nameIn.value=state.pitchers[team][p].name;
+    nameIn.addEventListener('input',e=>{state.pitchers[team][p].name=e.target.value;save();});
+    hdr.appendChild(jerseyWrap);hdr.appendChild(nameIn);
+    card.appendChild(hdr);
+    // Innings grid — read-only, computed from batter Ptr# entries
+    const grid=document.createElement('div');grid.className='pitcher-innings-grid';
+    for(let i=0;i<INNINGS;i++){
+      const cell=document.createElement('div');cell.className='pitcher-inn-cell';
+      const lbl=document.createElement('div');lbl.className='pitcher-inn-label';lbl.textContent='Inn '+(i+1);
+      const b=state.pitchers[team][p].innings[i].balls||0;
+      const s=state.pitchers[team][p].innings[i].strikes||0;
+      const bsRow=document.createElement('div');bsRow.className='bs-row';
+      bsRow.style.cssText='flex-direction:column;gap:3px;align-items:center;padding:2px 0;';
+      const bDiv=document.createElement('div');
+      bDiv.style.cssText='font-size:10px;color:#2ecc71;font-weight:700;';
+      bDiv.innerHTML='B: <span style="font-size:14px;font-weight:800;">'+b+'</span>';
+      const sDiv=document.createElement('div');
+      sDiv.style.cssText='font-size:10px;color:#e74c3c;font-weight:700;';
+      sDiv.innerHTML='S: <span style="font-size:14px;font-weight:800;">'+s+'</span>';
+      const pDiv=document.createElement('div');
+      pDiv.style.cssText='font-size:9px;color:#9b59b6;font-weight:700;border-top:1px solid #48484a;padding-top:2px;margin-top:1px;';
+      pDiv.textContent='P: '+(b+s);
+      bsRow.appendChild(bDiv);bsRow.appendChild(sDiv);bsRow.appendChild(pDiv);
+      cell.appendChild(lbl);cell.appendChild(bsRow);
+      grid.appendChild(cell);
+    }
+    card.appendChild(grid);
+    // Totals row
+    const totRow=document.createElement('div');totRow.className='pitcher-totals-row';
+    const totalBalls=state.pitchers[team][p].innings.reduce((a,c)=>a+(c.balls||0),0);
+    const totalStrikes=state.pitchers[team][p].innings.reduce((a,c)=>a+(c.strikes||0),0);
+    const totalPitches=totalBalls+totalStrikes;
+    const pitchWarn=totalPitches>75?' ⚠️':'';
+    const pitchColor=totalPitches>75?'color:#e74c3c;font-weight:900;':'';
+    totRow.innerHTML=
+      '<div class="pt-cell"><div class="pt-cell-label">Balls</div><div class="pt-cell-val b">'+totalBalls+'</div></div>'+
+      '<div class="pt-cell"><div class="pt-cell-label">Strikes</div><div class="pt-cell-val s">'+totalStrikes+'</div></div>'+
+      '<div class="pt-cell"><div class="pt-cell-label">Pitches</div><div class="pt-cell-val p" style="'+pitchColor+'">'+totalPitches+pitchWarn+'</div></div>';
+    card.appendChild(totRow);
+    // Show batters faced this pitcher (from batter pitcherJersey entries)
+    const pj=state.pitchers[team][p].jersey;
+    if(pj){
+      const facedDiv=document.createElement('div');
+      facedDiv.style.cssText='padding:5px 10px;font-size:10px;color:#8e8e93;border-top:1px solid #3a3a3c;';
+      const faced=battersFaced(team,pj);
+      const totalFaced=faced.reduce((a,b)=>a+b,0);
+      const innLabels=faced.map((c,i)=>c>0?'Inn '+(i+1)+': '+c+' batter'+(c>1?'s':''):'').filter(Boolean);
+      const srcTeam=team===0?'Away':'Home';
+      facedDiv.textContent=totalFaced>0?
+        ('vs '+srcTeam+' batters: '+innLabels.join(' | ')):
+        'Enter pitcher # in Ptr# column on opposing batter rows.';
+      card.appendChild(facedDiv);
+    }
+    container.appendChild(card);
+  }
+}
+
+function makeBSCounter(label,cls,team,pitcher,inning,field){
+  const wrap=document.createElement('div');wrap.className='bs-counter';
+  const lbl=document.createElement('div');lbl.className='bs-label '+cls;lbl.textContent=label;
+  const ctrl=document.createElement('div');ctrl.className='bs-ctrl';
+  const minB=document.createElement('div');minB.className='bs-btn';minB.textContent='−';
+  const val=document.createElement('div');val.className='bs-val '+(cls==='b'?'bv':'sv');
+  val.id='bs-'+team+'-'+pitcher+'-'+inning+'-'+field;
+  val.textContent=state.pitchers[team][pitcher].innings[inning][field]||0;
+  const plusB=document.createElement('div');plusB.className='bs-btn';plusB.textContent='+';
+  plusB.addEventListener('click',()=>{
+    state.pitchers[team][pitcher].innings[inning][field]=(state.pitchers[team][pitcher].innings[inning][field]||0)+1;
+    val.textContent=state.pitchers[team][pitcher].innings[inning][field];
+    updatePitcherTotals(team,pitcher);save();
+  });
+  minB.addEventListener('click',()=>{
+    if((state.pitchers[team][pitcher].innings[inning][field]||0)>0){
+      state.pitchers[team][pitcher].innings[inning][field]--;
+      val.textContent=state.pitchers[team][pitcher].innings[inning][field];
+      updatePitcherTotals(team,pitcher);save();
+    }
+  });
+  ctrl.appendChild(minB);ctrl.appendChild(val);ctrl.appendChild(plusB);
+  wrap.appendChild(lbl);wrap.appendChild(ctrl);
+  return wrap;
+}
+
+function updatePitcherTotals(team,p){
+  const b=state.pitchers[team][p].innings.reduce((a,c)=>a+(c.balls||0),0);
+  const s=state.pitchers[team][p].innings.reduce((a,c)=>a+(c.strikes||0),0);
+  const bEl=document.getElementById('pTotB-'+team+'-'+p);
+  const sEl=document.getElementById('pTotS-'+team+'-'+p);
+  const pEl=document.getElementById('pTotP-'+team+'-'+p);
+  if(bEl)bEl.textContent=b;if(sEl)sEl.textContent=s;if(pEl)pEl.textContent=b+s;
+}
+
+// ── Game Summary ──────────────────────────────────────────────────────────
+function buildGameSummary(){
+  const container=document.getElementById('gameSummary');
+  container.innerHTML='';
+  const n0=document.getElementById('teamName0').value||'Home';
+  const n1=document.getElementById('teamName1').value||'Away';
+
+  // Linescore
+  const lsSection=document.createElement('div');lsSection.className='summary-section';
+  lsSection.innerHTML='<div class="summary-title">📊 Linescore</div>';
+  const lsWrap=document.createElement('div');lsWrap.className='linescore';
+  const tbl=document.createElement('table');tbl.className='linescore-table';
+  // Header
+  let hdrHTML='<thead><tr><th>Team</th>';
+  for(let i=0;i<INNINGS;i++) hdrHTML+='<th>'+(i+1)+'</th>';
+  hdrHTML+='<th>R</th><th>H</th><th>HR</th><th>BB</th></tr></thead>';
+  // Build rows
+  const rows=[{team:0,label:n0,cls:'home-color'},{team:1,label:n1,cls:'away-color'}];
+  let bodyHTML='<tbody>';
+  rows.forEach(({team,label,cls})=>{
+    let totalRuns=0,totalHits=0,totalBB=0;
+    let rowHTML='<tr class="'+(team===0?'home-row':'')+'">';
+    rowHTML+='<td class="team-name-cell '+cls+'">'+label+'</td>';
+    for(let i=0;i<INNINGS;i++){
+      let innRuns=0,innHits=0;
+      state.teams[team].forEach(pl=>{
+        if(pl.innings[i].run)innRuns++;
+        if(isHit(pl.innings[i].play))innHits++;
+        if(pl.innings[i].play==='walk')totalBB++;
+      });
+      totalRuns+=innRuns;totalHits+=innHits;
+      rowHTML+='<td style="'+(innRuns>=5?'color:#e74c3c;font-weight:900':'')+'">'+(innRuns||'-')+'</td>';
+    }
+    // recalc totals correctly
+    totalRuns=0;totalHits=0;totalBB=0;
+    state.teams[team].forEach(pl=>pl.innings.forEach(inn=>{
+      if(inn.run)totalRuns++;
+      if(isHit(inn.play))totalHits++;
+      if(inn.play==='walk')totalBB++;
+    }));
+    let totalHR=0;
+    state.teams[team].forEach(pl=>pl.innings.forEach(inn=>{ if(inn.play==='homerun')totalHR++; }));
+    rowHTML+='<td class="total-cell '+cls+'">'+totalRuns+'</td>';
+    rowHTML+='<td class="total-cell">'+totalHits+'</td>';
+    rowHTML+='<td class="total-cell" style="color:#ecf0f1">'+totalHR+'</td>';
+    rowHTML+='<td class="total-cell">'+totalBB+'</td>';
+    rowHTML+='</tr>';
+    bodyHTML+=rowHTML;
+  });
+  bodyHTML+='</tbody>';
+  tbl.innerHTML=hdrHTML+bodyHTML;
+  lsWrap.appendChild(tbl);lsSection.appendChild(lsWrap);
+  container.appendChild(lsSection);
+
+  // Per-inning detail
+  const detailSection=document.createElement('div');detailSection.className='summary-section';
+  detailSection.innerHTML='<div class="summary-title">📋 Inning-by-Inning Detail</div>';
+  const detailInner=document.createElement('div');detailInner.className='inning-detail';
+  for(let i=0;i<INNINGS;i++){
+    const innRow=document.createElement('div');innRow.className='inn-detail-row';
+    innRow.innerHTML='<div class="inn-detail-title">Inning '+(i+1)+'</div>';
+    const dGrid=document.createElement('div');dGrid.className='detail-grid';
+    [0,1].forEach(team=>{
+      const tname=team===0?n0:n1;
+      let runs=0,hits=0,singles=0,doubles=0,triples=0,homeruns=0,walks=0,ks=0,errors=0,tballs=0,tstrikes=0;
+      state.teams[team].forEach(pl=>{
+        const inn=pl.innings[i];
+        if(inn.run)runs++;
+        if(isHit(inn.play))hits++;
+        if(inn.play==='single')singles++;
+        if(inn.play==='double')doubles++;
+        if(inn.play==='triple')triples++;
+        if(inn.play==='homerun')homeruns++;
+        if(inn.play==='walk')walks++;
+        if(inn.play==='strikeout')ks++;
+        if(inn.play==='error')errors++;
+        tballs+=inn.balls||0;
+        tstrikes+=inn.strikes||0;
+      });
+      // Pitcher balls/strikes for this inning
+      let balls=0,strikes=0;
+      state.pitchers[team].forEach(pt=>{
+        balls+=pt.innings[i].balls||0;
+        strikes+=pt.innings[i].strikes||0;
+      });
+      const box=document.createElement('div');box.className='detail-team-box';
+      box.innerHTML=
+        '<div class="detail-team-label">'+(team===0?'🔵 ':'🔴 ')+tname+'</div>'+
+        '<div class="detail-stat-row"><span>Runs</span><span style="color:#3498db">'+runs+'</span></div>'+
+        '<div class="detail-stat-row"><span>Hits (Total)</span><span style="color:#2ecc71">'+hits+'</span></div>'+
+        '<div class="detail-stat-row"><span>— Singles</span><span style="color:#2ecc71">'+singles+'</span></div>'+
+        '<div class="detail-stat-row"><span>— Doubles</span><span style="color:#27ae60">'+doubles+'</span></div>'+
+        '<div class="detail-stat-row"><span>— Triples</span><span style="color:#1e8449">'+triples+'</span></div>'+
+        '<div class="detail-stat-row"><span>— Home Runs</span><span style="color:#f39c12">'+homeruns+'</span></div>'+
+        '<div class="detail-stat-row"><span>Walks</span><span style="color:#f5a623">'+walks+'</span></div>'+
+        '<div class="detail-stat-row"><span>Strikeouts</span><span style="color:#9b59b6">'+ks+'</span></div>'+
+        '<div class="detail-stat-row"><span>Errors</span><span style="color:#e67e22">'+errors+'</span></div>'+
+        '<div class="detail-stat-row"><span>Batter Balls</span><span style="color:#2ecc71">'+tballs+'</span></div>'+
+        '<div class="detail-stat-row"><span>Batter Strikes</span><span style="color:#e74c3c">'+tstrikes+'</span></div>'+
+        '<div class="detail-stat-row"><span>Total Pitches (bat)</span><span style="color:#9b59b6">'+(tballs+tstrikes)+'</span></div>';
+      dGrid.appendChild(box);
+    });
+    innRow.appendChild(dGrid);detailInner.appendChild(innRow);
+  }
+  detailSection.appendChild(detailInner);container.appendChild(detailSection);
+
+  // Pitcher summary
+  const pitchSection=document.createElement('div');pitchSection.className='summary-section';
+  pitchSection.innerHTML='<div class="summary-title">⚾ Pitcher Summary</div>';
+  const ptInner=document.createElement('div');ptInner.style.padding='10px';
+  [0,1].forEach(team=>{
+    const tname=team===0?n0:n1;
+    const tLabel=document.createElement('div');
+    tLabel.style.cssText='font-size:12px;font-weight:700;color:'+(team===0?'#f5a623':'#e74c3c')+';margin-bottom:6px;margin-top:'+(team>0?'10px':'0');
+    tLabel.textContent=(team===0?'🔵 ':'🔴 ')+tname;
+    ptInner.appendChild(tLabel);
+    state.pitchers[team].forEach((pt,p)=>{
+      if(!pt.name&&pt.innings.every(i=>!i.balls&&!i.strikes)) return;
+      const pname=(pt.jersey?'#'+pt.jersey+' ':''+(p+1)+'. ')+(pt.name||'Pitcher '+(p+1));
+      const tb=pt.innings.reduce((a,c)=>a+(c.balls||0),0);
+      const ts=pt.innings.reduce((a,c)=>a+(c.strikes||0),0);
+      const row=document.createElement('div');
+      row.style.cssText='display:flex;justify-content:space-between;background:#3a3a3c;border-radius:6px;padding:6px 10px;margin-bottom:4px;font-size:12px;';
+      row.innerHTML='<span>'+pname+'</span><span><span style="color:#2ecc71">B:'+tb+'</span> <span style="color:#e74c3c">S:'+ts+'</span> <span style="color:#9b59b6">P:'+(tb+ts)+'</span></span>';
+      ptInner.appendChild(row);
+    });
+  });
+  pitchSection.appendChild(ptInner);container.appendChild(pitchSection);
+}
+
+// ── Header subtitle ───────────────────────────────────────────────────────
+function updateHeaderSub(){
+  const n0=document.getElementById('teamName0').value||'Home';
+  const n1=document.getElementById('teamName1').value||'Away';
+  const dt=document.getElementById('gameDate').value;
+  const loc=document.getElementById('gameLocation').value;
+  let parts=[n0+' vs '+n1];
+  if(dt) parts.push(new Date(dt+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}));
+  if(loc) parts.push(loc);
+  document.getElementById('headerSub').textContent=parts.join(' · ');
+}
+
+// ── Reset ─────────────────────────────────────────────────────────────────
+function confirmReset(){
+  if(confirm('Reset entire scoresheet? This cannot be undone.')){
+    for(let t=0;t<2;t++){
+      for(let p=0;p<PLAYERS;p++) state.teams[t][p]=freshPlayer(p+1);
+      for(let p=0;p<PITCHERS;p++) state.pitchers[t][p]=freshPitcher();
+    }
+    activeInning=[0,0];
+    buildScoresheet(0);buildScoresheet(1);buildPitchersPage();
+    ['teamName0','teamName1','gameDate','gameLocation'].forEach(id=>document.getElementById(id).value='');
+    try{localStorage.removeItem('bss3');localStorage.removeItem('bss3_info');}catch(e){}
+    updateHeaderSub();updateScoreBadges();
+  }
+}
+
+// ── Save to File ─────────────────────────────────────────────────────────
+function saveToFile(){
+  try{
+    const n0=document.getElementById('teamName0').value||'Home';
+    const n1=document.getElementById('teamName1').value||'Away';
+    const dt=document.getElementById('gameDate').value||new Date().toISOString().slice(0,10);
+    const filename=dt+'_'+n0.replace(/\s+/g,'_')+'_vs_'+n1.replace(/\s+/g,'_')+'.html';
+    // Embed current state into a snapshot of this page
+    const snapshot=document.documentElement.outerHTML;
+    const blob=new Blob([snapshot],{type:'text/html'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url;a.download=filename;
+    document.body.appendChild(a);a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }catch(e){alert('Save failed: '+e.message);}
+}
+
+// ── Swap Functions ───────────────────────────────────────────────────────
+function toggleSwapMode(team){
+  if(swapMode&&swapTeam===team){ cancelSwap(team); return; }
+  swapMode=true; swapTeam=team; swapFirst=-1;
+  document.getElementById('swapBtn'+team).classList.add('active');
+  document.getElementById('swapCancelBtn'+team).classList.add('visible');
+  document.getElementById('swapHint'+team).classList.add('visible');
+  document.getElementById('swapHint'+team).textContent='Tap a jersey # to select the FIRST player.';
+  lockJerseys(team);
+}
+
+function lockJerseys(team){
+  const container=document.getElementById('scoresheet'+team);
+  if(!container) return;
+  const jerseys=container.querySelectorAll('.jersey-input');
+  jerseys.forEach((inp,p)=>{
+    inp.readOnly=true;
+    inp.classList.add('swap-lock');
+    // Remove old listeners by cloning
+    const clone=inp.cloneNode(true);
+    inp.parentNode.replaceChild(clone,inp);
+    clone.addEventListener('click',()=>handleSwapClick(team,p,clone));
+  });
+}
+
+function unlockJerseys(team){
+  const container=document.getElementById('scoresheet'+team);
+  if(!container) return;
+  const jerseys=container.querySelectorAll('.jersey-input');
+  jerseys.forEach((inp,p)=>{
+    inp.readOnly=false;
+    inp.classList.remove('swap-lock','swap-first');
+    // Restore save listener by cloning
+    const clone=inp.cloneNode(true);
+    inp.parentNode.replaceChild(clone,inp);
+    clone.addEventListener('input',e=>{ state.teams[team][p].jersey=e.target.value; save(); });
+  });
+}
+
+function cancelSwap(team){
+  swapMode=false; swapTeam=-1; swapFirst=-1;
+  document.getElementById('swapBtn'+team).classList.remove('active');
+  document.getElementById('swapCancelBtn'+team).classList.remove('visible');
+  document.getElementById('swapHint'+team).classList.remove('visible');
+  unlockJerseys(team);
+}
+
+function handleSwapClick(team,playerIdx,jerseyEl){
+  if(swapFirst===-1){
+    // Select first player — highlight their jersey
+    swapFirst=playerIdx;
+    jerseyEl.classList.remove('swap-lock');
+    jerseyEl.classList.add('swap-first');
+    const jLabel=state.teams[team][playerIdx].jersey||String(playerIdx+1);
+    document.getElementById('swapHint'+team).textContent=
+      '#'+jLabel+' selected ✓ — now tap the jersey # of the SECOND player.';
+  } else {
+    const a=swapFirst, b=playerIdx;
+    if(a===b){
+      // Deselect — re-lock first player
+      const container=document.getElementById('scoresheet'+team);
+      const jerseys=container.querySelectorAll('.jersey-input');
+      jerseys[a].classList.remove('swap-first');
+      jerseys[a].classList.add('swap-lock');
+      swapFirst=-1;
+      document.getElementById('swapHint'+team).textContent='Tap a jersey # to select the FIRST player.';
+      return;
+    }
+    // Deep swap all player data
+    const temp=JSON.parse(JSON.stringify(state.teams[team][a]));
+    state.teams[team][a]=JSON.parse(JSON.stringify(state.teams[team][b]));
+    state.teams[team][b]=temp;
+    save();
+    // Exit swap mode and rebuild
+    swapMode=false; swapTeam=-1; swapFirst=-1;
+    document.getElementById('swapBtn'+team).classList.remove('active');
+    document.getElementById('swapCancelBtn'+team).classList.remove('visible');
+    buildScoresheet(team);
+    // Show confirmation
+    const hint=document.getElementById('swapHint'+team);
+    hint.classList.add('visible');
+    hint.style.background='#1e5c2e'; hint.style.color='#2ecc71';
+    hint.textContent='✓ Players swapped!';
+    setTimeout(()=>{
+      hint.classList.remove('visible');
+      hint.style.background=''; hint.style.color='';
+    },2000);
+  }
+}
+
+// ── Sync pitcher data from batter entry ──────────────────────────────────
+// Home batters (team 0) face AWAY pitchers (team 1), vice versa.
+// Auto-registers pitchers from Ptr# entries and sums balls+strikes per inning.
+function syncAllPitcherTotals(){
+  for(let batterTeam=0;batterTeam<2;batterTeam++){
+    const pitcherTeam=1-batterTeam;
+    // Collect all unique pitcher jerseys from batter Ptr# entries
+    const jerseySet=new Set();
+    state.teams[batterTeam].forEach(pl=>{
+      pl.innings.forEach(inn=>{ if(inn.pitcherJersey) jerseySet.add(inn.pitcherJersey); });
+    });
+    // Auto-register: assign jersey to first empty pitcher slot if not already present
+    jerseySet.forEach(jersey=>{
+      let idx=state.pitchers[pitcherTeam].findIndex(pt=>pt.jersey===jersey);
+      if(idx===-1){
+        idx=state.pitchers[pitcherTeam].findIndex(pt=>!pt.jersey);
+        if(idx!==-1) state.pitchers[pitcherTeam][idx].jersey=jersey;
+      }
+    });
+    // Sum balls+strikes per pitcher per inning from batter data
+    state.pitchers[pitcherTeam].forEach(pt=>{
+      if(!pt.jersey) return;
+      for(let inn=0;inn<INNINGS;inn++){
+        let b=0,s=0;
+        state.teams[batterTeam].forEach(pl=>{
+          if(pl.innings[inn].pitcherJersey===pt.jersey){
+            b+=pl.innings[inn].balls||0;
+            s+=pl.innings[inn].strikes||0;
+          }
+        });
+        pt.innings[inn].balls=b;
+        pt.innings[inn].strikes=s;
+      }
+    });
+  }
+  buildPitchersPage();
+  updatePtrColors(0);
+  updatePtrColors(1);
+}
+
+function syncPitcherFromBatter(team,inn){
+  syncAllPitcherTotals();
+}
+
+function battersFaced(pitcherTeam,pitcherJersey){
+  if(!pitcherJersey) return [];
+  const batterTeam=1-pitcherTeam;
+  const result=[];
+  for(let inn=0;inn<INNINGS;inn++){
+    const cnt=state.teams[batterTeam].filter(pl=>{
+      return pl.innings[inn].pitcherJersey===pitcherJersey &&
+             ((pl.innings[inn].balls||0)>0||(pl.innings[inn].strikes||0)>0);
+    }).length;
+    result.push(cnt);
+  }
+  return result;
+}
+
+// Find pitcher index by jersey number for a team (-1 if not found)
+function findPitcherByJersey(team,jersey){
+  if(!jersey) return -1;
+  return state.pitchers[team].findIndex(pt=>pt.jersey===jersey);
+}
+
+// Get display label for a pitcher jersey (jersey# + name if known)
+function pitcherLabel(team,jersey){
+  if(!jersey) return '—';
+  const idx=findPitcherByJersey(team,jersey);
+  if(idx>=0&&state.pitchers[team][idx].name) return '#'+jersey+' '+state.pitchers[team][idx].name;
+  return '#'+jersey;
+}
+
+
+// ── Pitch Count Warning ───────────────────────────────────────────────────
+// Returns total pitches thrown by a pitcher (identified by jersey on pitcherTeam)
+function getPitcherTotalPitches(pitcherTeam, jersey){
+  if(!jersey) return 0;
+  const pt=state.pitchers[pitcherTeam].find(p=>p.jersey===jersey);
+  if(!pt) return 0;
+  return pt.innings.reduce((a,c)=>a+(c.balls||0)+(c.strikes||0),0);
+}
+
+// Update Ptr# cell colors on a batter team's scoresheet based on pitcher pitch counts
+function updatePtrColors(batterTeam){
+  const container=document.getElementById('scoresheet'+batterTeam);
+  if(!container) return;
+  const pitcherTeam=1-batterTeam;
+  container.querySelectorAll('.pitcher-jersey-cell').forEach(cell=>{
+    const jersey=cell.value;
+    if(!jersey){cell.style.borderColor='#9b59b6';cell.style.color='#9b59b6';return;}
+    const total=getPitcherTotalPitches(pitcherTeam,jersey);
+    if(total>75){
+      cell.style.borderColor='#e74c3c';
+      cell.style.color='#e74c3c';
+      cell.title='⚠️ '+total+' pitches thrown';
+    } else {
+      cell.style.borderColor='#9b59b6';
+      cell.style.color='#9b59b6';
+      cell.title=total>0?total+' pitches':'';
+    }
+  });
+}
+
+
+// ── Voice Dictation ──────────────────────────────────────────────────────
+let recognition = null;
+let dictationActive = false;
+
+const PLAY_ALIASES = {
+  'single':'single','1b':'single','one base':'single',
+  'double':'double','2b':'double','two base':'double',
+  'triple':'triple','3b':'triple','three base':'triple',
+  'home run':'homerun','homer':'homerun','homerun':'homerun','hr':'homerun','4b':'homerun',
+  'out':'out','fly out':'out','ground out':'out','pop out':'out','pop up':'out',
+  'strikeout':'strikeout','struck out':'strikeout','k':'strikeout',
+  'walk':'walk','base on balls':'walk','bb':'walk',
+  'hit by pitch':'hbp','hbp':'hbp',
+  'error':'error',
+  'hit':'single' // generic "hit" → single
+};
+
+function initDictation(){
+  const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SpeechRec){
+    alert('Voice dictation is not supported in this browser. Please use Safari on iOS 14.5+ or Chrome on desktop.');
+    return false;
+  }
+  recognition = new SpeechRec();
+  recognition.lang = 'en-US';
+  recognition.continuous = false;
+  recognition.interimResults = true;
+  recognition.maxAlternatives = 3;
+
+  recognition.onresult = (e) => {
+    let interim = '';
+    let final = '';
+    for(let i=e.resultIndex;i<e.results.length;i++){
+      const t = e.results[i][0].transcript.toLowerCase().trim();
+      if(e.results[i].isFinal) final = t;
+      else interim = t;
+    }
+    document.getElementById('dictation-transcript').textContent = '"' + (final||interim) + '"';
+    if(final) processDictation(final);
+  };
+
+  recognition.onend = () => {
+    if(dictationActive){
+      // Auto-restart for continuous listening
+      try{ recognition.start(); }catch(e){}
+    }
+  };
+
+  recognition.onerror = (e) => {
+    if(e.error === 'not-allowed'){
+      showDictationResult('❌ Mic permission denied', '#e74c3c');
+      stopDictation();
+    } else if(e.error !== 'no-speech'){
+      showDictationResult('⚠️ ' + e.error, '#f5a623');
+    }
+  };
+  return true;
+}
+
+function toggleDictation(){
+  if(dictationActive){ stopDictation(); }
+  else { startDictation(); }
+}
+
+function startDictation(){
+  if(!recognition && !initDictation()) return;
+  dictationActive = true;
+  document.getElementById('dictation-toast').style.display = 'block';
+  document.getElementById('dictation-status').textContent = '🎙️ Listening...';
+  document.getElementById('dictation-transcript').textContent = '';
+  document.getElementById('dictation-result').textContent = '';
+  document.getElementById('nav-mic').classList.add('recording');
+  document.getElementById('mic-icon').textContent = '🔴';
+  document.getElementById('mic-label').textContent = 'Stop';
+  try{ recognition.start(); }catch(e){}
+}
+
+function stopDictation(){
+  dictationActive = false;
+  try{ recognition.stop(); }catch(e){}
+  document.getElementById('nav-mic').classList.remove('recording');
+  document.getElementById('mic-icon').textContent = '🎙️';
+  document.getElementById('mic-label').textContent = 'Voice';
+  document.getElementById('dictation-status').textContent = '✅ Stopped';
+  setTimeout(()=>{
+    document.getElementById('dictation-toast').style.display='none';
+  }, 1500);
+}
+
+function showDictationResult(msg, color='#2ecc71'){
+  const el = document.getElementById('dictation-result');
+  el.style.color = color;
+  el.textContent = msg;
+  // Flash
+  el.style.opacity='1';
+  setTimeout(()=>{ el.style.opacity='0.6'; }, 600);
+  setTimeout(()=>{ el.style.opacity='1'; }, 1000);
+}
+
+function processDictation(text){
+  // Normalize numbers written as words
+  const wordNums = {
+    'zero':'0','one':'1','two':'2','three':'3','four':'4','five':'5','six':'6',
+    'seven':'7','eight':'8','nine':'9','ten':'10','eleven':'11','twelve':'12',
+    'thirteen':'13','fourteen':'14','fifteen':'15','sixteen':'16','seventeen':'17',
+    'eighteen':'18','nineteen':'19','twenty':'20','twenty one':'21','twenty two':'22',
+    'twenty three':'23','twenty four':'24','twenty five':'25','twenty six':'26',
+    'twenty seven':'27','twenty eight':'28','twenty nine':'29','thirty':'30',
+    'thirty one':'31','thirty two':'32','thirty three':'33','thirty four':'34',
+    'thirty five':'35','thirty six':'36','thirty seven':'37','thirty eight':'38',
+    'thirty nine':'39','forty':'40','forty five':'45','fifty':'50','ninety nine':'99'
+  };
+  let t = text;
+  Object.entries(wordNums).forEach(([word,num])=>{
+    t = t.replace(new RegExp('\b'+word+'\b','g'), num);
+  });
+
+  // Determine active team from current tab
+  const activePage = document.querySelector('.page.active');
+  const activeTeam = activePage ? (activePage.id==='page-home'?0:activePage.id==='page-away'?1:null) : null;
+
+  // ── Pattern 1: "player [#] ball|strike|[play]" ──
+  // "player 12 ball", "number 7 strike", "batter 3 hit", "#5 double"
+  const playerPattern = /(?:player|batter|number|#|jersey)?\s*(\d{1,2})\s+(ball|balls|strike|strikes|run|scored|single|double|triple|home run|homerun|homer|hr|out|fly out|ground out|pop out|walk|bb|strikeout|struck out|error|hbp|hit by pitch|hit|k)/i;
+  const pm = t.match(playerPattern);
+  if(pm && activeTeam !== null){
+    const jersey = pm[1];
+    const cmd = pm[2].toLowerCase().trim();
+    const inn = activeInning[activeTeam];
+    // Find player by jersey
+    const pIdx = state.teams[activeTeam].findIndex(p=>p.jersey===jersey);
+    if(pIdx === -1){
+      showDictationResult('❓ No player #'+jersey, '#f5a623');
+      return;
+    }
+    const pl = state.teams[activeTeam][pIdx];
+    if(cmd==='ball'||cmd==='balls'){
+      pl.innings[inn].balls = (pl.innings[inn].balls||0)+1;
+      syncAllPitcherTotals(); updateTotalsBar(activeTeam);
+      buildScoresheet(activeTeam);
+      showDictationResult('✅ #'+jersey+' Ball '+(pl.innings[inn].balls));
+    } else if(cmd==='strike'||cmd==='strikes'||cmd==='k'){
+      pl.innings[inn].strikes = (pl.innings[inn].strikes||0)+1;
+      syncAllPitcherTotals(); updateTotalsBar(activeTeam);
+      buildScoresheet(activeTeam);
+      showDictationResult('✅ #'+jersey+' Strike '+(pl.innings[inn].strikes));
+    } else if(cmd==='run'||cmd==='scored'){
+      pl.innings[inn].run = !pl.innings[inn].run;
+      updateTotalsBar(activeTeam); refreshAllRunColors(activeTeam);
+      showDictationResult('✅ #'+jersey+' Run '+(pl.innings[inn].run?'✓':'✗'));
+    } else {
+      // Play type
+      const playKey = PLAY_ALIASES[cmd] || null;
+      if(playKey){
+        pl.innings[inn].play = pl.innings[inn].play===playKey ? '' : playKey;
+        buildScoresheet(activeTeam); updateTotalsBar(activeTeam);
+        showDictationResult('✅ #'+jersey+' → '+playKey);
+      } else {
+        showDictationResult('❓ Unknown: "'+cmd+'"', '#f5a623');
+      }
+    }
+    save();
+    return;
+  }
+
+  // ── Pattern 2: "pitcher [#] ball|strike" ──
+  const pitcherPattern = /pitcher\s+(\d{1,2})\s+(ball|balls|strike|strikes)/i;
+  const ptm = t.match(pitcherPattern);
+  if(ptm){
+    const jersey = ptm[1];
+    const cmd = ptm[2].toLowerCase();
+    // Find which team this pitcher belongs to (search both)
+    let ptTeam = -1, ptIdx = -1;
+    [0,1].forEach(team=>{
+      const idx = state.pitchers[team].findIndex(p=>p.jersey===jersey);
+      if(idx!==-1){ ptTeam=team; ptIdx=idx; }
+    });
+    if(ptTeam===-1){
+      showDictationResult('❓ Pitcher #'+jersey+' not found', '#f5a623');
+      return;
+    }
+    // Use active inning of the opposing (batter) team
+    const battingTeam = 1-ptTeam;
+    const inn = activeInning[battingTeam];
+    if(cmd==='ball'||cmd==='balls'){
+      state.pitchers[ptTeam][ptIdx].innings[inn].balls=(state.pitchers[ptTeam][ptIdx].innings[inn].balls||0)+1;
+      showDictationResult('✅ P#'+jersey+' Ball '+(state.pitchers[ptTeam][ptIdx].innings[inn].balls));
+    } else {
+      state.pitchers[ptTeam][ptIdx].innings[inn].strikes=(state.pitchers[ptTeam][ptIdx].innings[inn].strikes||0)+1;
+      showDictationResult('✅ P#'+jersey+' Strike '+(state.pitchers[ptTeam][ptIdx].innings[inn].strikes));
+    }
+    buildPitchersPage();
+    save();
+    return;
+  }
+
+  // ── Pattern 3: inning switch "inning [n]" or "go to inning [n]" ──
+  const innMatch = t.match(/(?:go to |switch to |inning )?inning\s+(\d{1,2})/i);
+  if(innMatch && activeTeam!==null){
+    const innNum = parseInt(innMatch[1])-1;
+    if(innNum>=0 && innNum<INNINGS){
+      activeInning[activeTeam]=innNum;
+      buildInningBtns(activeTeam);
+      buildScoresheet(activeTeam);
+      showDictationResult('✅ Inning '+(innNum+1));
+      save();
+      return;
+    }
+  }
+
+  showDictationResult('❓ Not recognized', '#8e8e93');
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────
+loadSaved();
+buildInningBtns(0);buildInningBtns(1);
+buildScoresheet(0);buildScoresheet(1);
+syncAllPitcherTotals();
+syncAllPitcherTotals();
+updateHeaderSub();updateScoreBadges();
+</script>
+</body>
+</html>
