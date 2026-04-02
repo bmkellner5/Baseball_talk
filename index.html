@@ -1625,23 +1625,29 @@ function processDictation(text, alternatives){
     buildScoresheet(activeTeam);
     showDictationResult('✅ #' + jersey + ' Strike → ' + pl.innings[inn].strikes);
   } else if(cmd === 'run'){
-    // Always SET to true (not toggle) to avoid double-fire reversal
     pl.innings[inn].run = true;
-    // 1. Direct DOM update on the run button for this player row
-    const ssContainer = document.getElementById('scoresheet' + activeTeam);
-    if(ssContainer){
-      const allPlayerRows = Array.from(ssContainer.querySelectorAll('.player-row'));
-      if(allPlayerRows[pIdx]){
-        const rBtn = allPlayerRows[pIdx].querySelector('.run-toggle');
-        if(rBtn){ rBtn.className = 'run-toggle scored'; }
-      }
-    }
-    // 2. Update totals and score badge
-    updateTotalsBar(activeTeam);
-    refreshAllRunColors(activeTeam);
-    updateScoreBadges();
     save();
-    showDictationResult('✅ #' + jersey + ' scored a Run!');
+    // Force full scoresheet rebuild to reflect updated state
+    buildScoresheet(activeTeam);
+    updateTotalsBar(activeTeam);
+    updateScoreBadges();
+    // After rebuild, directly find and force-style the run button
+    setTimeout(function(){
+      const ssC = document.getElementById('scoresheet' + activeTeam);
+      if(ssC){
+        const pRows = Array.from(ssC.querySelectorAll('.player-row'));
+        if(pRows[pIdx]){
+          const rb = pRows[pIdx].querySelector('.run-toggle');
+          if(rb){
+            rb.className = 'run-toggle scored';
+            rb.style.background = '#1e3a5c';
+            rb.style.borderColor = '#3498db';
+            rb.style.color = '#3498db';
+          }
+        }
+      }
+    }, 50);
+    showDictationResult('✅ #' + jersey + ' Run ✓ (inn:' + (inn+1) + ' row:' + pIdx + ')');
   } else {
     pl.innings[inn].play = (pl.innings[inn].play === cmd) ? '' : cmd;
     buildScoresheet(activeTeam); updateTotalsBar(activeTeam);
