@@ -1481,125 +1481,81 @@ function showDictationResult(msg, color='#2ecc71'){
 }
 
 function processDictation(text, alternatives){
-  // Show raw transcript for debugging
+  // Always show exactly what was heard
   document.getElementById('dictation-transcript').textContent = '"' + text + '"';
 
-  // Normalize to lowercase
+  // Work with lowercase
   let t = text.toLowerCase().trim();
 
-  // ── Word-to-number conversion ──
-  const wordNums = {
-    'zero':'0','one':'1','two':'2','three':'3','four':'4','five':'5','six':'6',
-    'seven':'7','eight':'8','nine':'9','ten':'10','eleven':'11','twelve':'12',
-    'thirteen':'13','fourteen':'14','fifteen':'15','sixteen':'16','seventeen':'17',
-    'eighteen':'18','nineteen':'19','twenty':'20','twenty-one':'21','twenty one':'21',
-    'twenty-two':'22','twenty two':'22','twenty-three':'23','twenty three':'23',
-    'twenty-four':'24','twenty four':'24','twenty-five':'25','twenty five':'25',
-    'twenty-six':'26','twenty six':'26','twenty-seven':'27','twenty seven':'27',
-    'twenty-eight':'28','twenty eight':'28','twenty-nine':'29','twenty nine':'29',
-    'thirty':'30','thirty-one':'31','thirty one':'31','thirty-two':'32','thirty two':'32',
-    'forty':'40','forty-five':'45','forty five':'45','fifty':'50','ninety-nine':'99','ninety nine':'99'
-  };
-  // Replace longest matches first (multi-word before single-word)
-  const sortedWords = Object.keys(wordNums).sort((a,b) => b.length - a.length);
-  sortedWords.forEach(word => {
-    t = t.split(word).join(wordNums[word]);
-  });
+  // ── Simple word-to-digit map (whole word only) ──
+  const W2N = {one:'1',two:'2',three:'3',four:'4',five:'5',six:'6',seven:'7',
+               eight:'8',nine:'9',ten:'10',eleven:'11',twelve:'12'};
+  // Replace spoken numbers with digits (word boundary safe via split on spaces)
+  t = t.split(' ').map(w => W2N[w] || w).join(' ');
 
-  // Normalize common iOS transcript quirks
-  t = t.replace(/strikes/g,'strike')
-       .replace(/balls/g,'ball')
-       .replace(/home run/gi,'homerun')
-       .replace(/hit by pitch/gi,'hbp')
-       .replace(/base on balls/gi,'walk')
-       .replace(/fly out/gi,'out')
-       .replace(/ground out/gi,'out')
-       .replace(/pop out/gi,'out')
-       .replace(/pop up/gi,'out')
-       .replace(/struck out/gi,'strikeout')
-       .replace(/strike out/gi,'strikeout')
-       .replace(/number/g,'')   // "number 7" → " 7"
-       .replace(/player/g,'')   // "player 7" → " 7"
-       .replace(/batter/g,'')   // "batter 7" → " 7"
-       .replace(/jersey/g,'')   // "jersey 7" → " 7"
-       .replace(/no/g,'')       // "no 7" (Irish accent) → " 7"
-       .replace(/\s+/g,' ').trim(); // collapse whitespace
+  // ── Strip filler words ──
+  t = t.replace(/(player|batter|number|jersey|the|a|an)/g, '').replace(/\s+/g,' ').trim();
 
-  // ── Determine active batter team from current visible tab ──
-  // Default to whichever team tab was last active if on pitchers/game tab
-  let activeTeam = null;
-  const activePage = document.querySelector('.page.active');
-  if(activePage){
-    if(activePage.id==='page-home') activeTeam = 0;
-    else if(activePage.id==='page-away') activeTeam = 1;
-  }
-  // If on pitchers/game tab, use most recently active batter team
-  if(activeTeam === null){
-    // Check which team tab button is lit
-    const homeBtn = document.getElementById('nav-home');
-    activeTeam = 0; // default to home
+  // ── Inning switch: "inning 3" ──
+  const innMatch = t.match(/inning\s+(\d{1,2})/);
+  if(innMatch){
+    const n = parseInt(innMatch[1]) - 1;
+    if(n >= 0 && n < INNINGS){
+      activeInning[0] = n; activeInning[1] = n;
+      buildInningBtns(0); buildInningBtns(1);
+      buildScoresheet(0); buildScoresheet(1);
+      showDictationResult('✅ Now on Inning ' + (n+1));
+      save(); return;
+    }
   }
 
-  // ── Extract number and command from any ordering ──
-  // Supports: "7 ball", "ball 7", "7 single", "single 7"
-  const PLAYS = ['homerun','homer','hr','triple','double','single','walk','bb',
-                 'strikeout','error','hbp','out','hit'];
-  const COUNTS = ['ball','strike','run','scored'];
-  const ALL_CMDS = [...PLAYS, ...COUNTS];
-
-  // Find a number in the string
+  // ── Find jersey number ──
   const numMatch = t.match(/(\d{1,2})/);
   if(!numMatch){
-    // ── Inning switch: "inning 3" ──
-    const innMatch = t.match(/inning\s*(\d{1,2})/);
-    if(innMatch){
-      const innNum = parseInt(innMatch[1]) - 1;
-      if(innNum >= 0 && innNum < INNINGS){
-        activeInning[0] = innNum;
-        activeInning[1] = innNum;
-        buildInningBtns(0); buildInningBtns(1);
-        buildScoresheet(0); buildScoresheet(1);
-        showDictationResult('✅ Inning ' + (innNum+1));
-        save(); return;
-      }
-    }
-    showDictationResult('❓ Heard: "' + text + '"', '#f5a623');
+    showDictationResult('❓ No number heard — say "7 ball" or "12 single"', '#f5a623');
     return;
   }
-
   const jersey = numMatch[1];
 
-  // Find a command word
+  // ── Identify command ──
+  const CMD_MAP = {
+    'ball':'ball', 'balls':'ball',
+    'strike':'strike', 'strikes':'strike', 'strikeout':'strikeout', 'struck':'strikeout', 'k':'strikeout',
+    'run':'run', 'scored':'run',
+    'single':'single', '1b':'single',
+    'double':'double', '2b':'double',
+    'triple':'triple', '3b':'triple',
+    'homer':'homerun', 'home':'homerun', 'homerun':'homerun', 'hr':'homerun', '4b':'homerun',
+    'out':'out', 'fly':'out', 'ground':'out', 'pop':'out',
+    'walk':'walk', 'bb':'walk',
+    'error':'error',
+    'hit':'single'
+  };
   let cmd = null;
-  for(const c of ALL_CMDS){
-    if(t.includes(c)){ cmd = c; break; }
+  const words = t.split(' ');
+  for(const w of words){
+    if(CMD_MAP[w]){ cmd = CMD_MAP[w]; break; }
   }
   if(!cmd){
-    // ── Pitcher commands: "pitcher 7 ball/strike" ──
-    if(t.includes('pitcher')){
-      showDictationResult('❓ Say "pitcher [#] ball" or "pitcher [#] strike"', '#f5a623');
-    } else {
-      // Try alternatives from iOS
-    if(alternatives && alternatives.length > 1){
-      for(let i=1;i<alternatives.length;i++){
-        const altResult = tryParseCommand(alternatives[i]);
-        if(altResult){ showDictationResult(altResult); save(); return; }
-      }
-    }
-    showDictationResult('❓ Heard: "' + text + '" — say "[number] ball/strike/single/out"', '#f5a623');
-    }
+    showDictationResult('❓ Heard "#' + jersey + '" but no command — say "' + jersey + ' ball" or "' + jersey + ' single"', '#f5a623');
     return;
   }
+
+  // ── Determine team from active tab ──
+  let activeTeam = 0; // default home
+  const ap = document.querySelector('.page.active');
+  if(ap && ap.id === 'page-away') activeTeam = 1;
 
   // ── Pitcher command ──
   if(t.includes('pitcher')){
     let ptTeam = -1, ptIdx = -1;
     [0,1].forEach(team => {
-      const idx = state.pitchers[team].findIndex(p => p.jersey === jersey);
-      if(idx !== -1){ ptTeam = team; ptIdx = idx; }
+      state.pitchers[team].forEach((p,i) => {
+        if(p.jersey === jersey){ ptTeam = team; ptIdx = i; }
+      });
     });
     if(ptTeam === -1){
-      showDictationResult('❓ Pitcher #' + jersey + ' not found — add them to Pitchers tab', '#f5a623');
+      showDictationResult('❓ Pitcher #' + jersey + ' not found in Pitchers tab', '#f5a623');
       return;
     }
     const battingTeam = 1 - ptTeam;
@@ -1607,29 +1563,29 @@ function processDictation(text, alternatives){
     if(cmd === 'ball'){
       state.pitchers[ptTeam][ptIdx].innings[inn].balls = (state.pitchers[ptTeam][ptIdx].innings[inn].balls||0) + 1;
       showDictationResult('✅ Pitcher #' + jersey + ' Ball ' + state.pitchers[ptTeam][ptIdx].innings[inn].balls);
-    } else if(cmd === 'strike'){
+    } else {
       state.pitchers[ptTeam][ptIdx].innings[inn].strikes = (state.pitchers[ptTeam][ptIdx].innings[inn].strikes||0) + 1;
       showDictationResult('✅ Pitcher #' + jersey + ' Strike ' + state.pitchers[ptTeam][ptIdx].innings[inn].strikes);
-    } else {
-      showDictationResult('❓ For pitchers say "pitcher [#] ball" or "pitcher [#] strike"', '#f5a623');
     }
     buildPitchersPage(); save(); return;
   }
 
   // ── Batter command ──
   const inn = activeInning[activeTeam];
-  const pIdx = state.teams[activeTeam].findIndex(p => p.jersey === jersey);
+  let pIdx = state.teams[activeTeam].findIndex(p => p.jersey === jersey);
+
+  // If not found on active team, try other team and hint
   if(pIdx === -1){
-    // Try other team
-    const otherTeam = 1 - activeTeam;
-    const oIdx = state.teams[otherTeam].findIndex(p => p.jersey === jersey);
+    const other = 1 - activeTeam;
+    const oIdx = state.teams[other].findIndex(p => p.jersey === jersey);
     if(oIdx !== -1){
-      showDictationResult('❓ #' + jersey + ' is on ' + (otherTeam===0?'Home':'Away') + ' — switch tabs first', '#f5a623');
+      showDictationResult('❓ #' + jersey + ' is on ' + (other===0?'Home':'Away') + ' tab — switch tabs', '#f5a623');
     } else {
-      showDictationResult('❓ No player #' + jersey + ' on ' + (activeTeam===0?'Home':'Away') + ' team', '#f5a623');
+      showDictationResult('❓ Player #' + jersey + ' not found on ' + (activeTeam===0?'Home':'Away') + ' tab', '#f5a623');
     }
     return;
   }
+
   const pl = state.teams[activeTeam][pIdx];
 
   if(cmd === 'ball'){
@@ -1642,25 +1598,15 @@ function processDictation(text, alternatives){
     syncAllPitcherTotals(); updateTotalsBar(activeTeam);
     buildScoresheet(activeTeam);
     showDictationResult('✅ #' + jersey + ' Strike → ' + pl.innings[inn].strikes);
-  } else if(cmd === 'run' || cmd === 'scored'){
+  } else if(cmd === 'run'){
     pl.innings[inn].run = !pl.innings[inn].run;
     updateTotalsBar(activeTeam); refreshAllRunColors(activeTeam);
     showDictationResult('✅ #' + jersey + ' Run ' + (pl.innings[inn].run ? '✓' : '✗'));
   } else {
-    // Play type
-    const PLAY_MAP = {
-      'single':'single','double':'double','triple':'triple','homerun':'homerun',
-      'homer':'homerun','hr':'homerun','hit':'single','out':'out','walk':'walk',
-      'bb':'walk','strikeout':'strikeout','k':'strikeout','error':'error','hbp':'hbp'
-    };
-    const playKey = PLAY_MAP[cmd];
-    if(playKey){
-      pl.innings[inn].play = pl.innings[inn].play === playKey ? '' : playKey;
-      buildScoresheet(activeTeam); updateTotalsBar(activeTeam);
-      showDictationResult('✅ #' + jersey + ' → ' + playKey);
-    } else {
-      showDictationResult('❓ Unknown command: "' + cmd + '"', '#f5a623');
-    }
+    // Play type (single/double/triple/homerun/out/walk/strikeout/error)
+    pl.innings[inn].play = (pl.innings[inn].play === cmd) ? '' : cmd;
+    buildScoresheet(activeTeam); updateTotalsBar(activeTeam);
+    showDictationResult('✅ #' + jersey + ' → ' + cmd);
   }
   save();
 }
