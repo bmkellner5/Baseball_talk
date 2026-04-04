@@ -533,7 +533,7 @@ header h1{font-size:20px;font-weight:700;color:#f5a623;}
 
 <!-- Dictation Toast -->
 <div id="dictation-toast" style="
-  display:none;position:fixed;bottom:80px;left:50%;transform:translateX(-50%);
+  display:none;position:fixed;top:16px;left:50%;transform:translateX(-50%);
   background:#1c1c1e;border:1.5px solid #48484a;border-radius:14px;
   padding:10px 18px;z-index:9999;min-width:260px;max-width:90vw;
   box-shadow:0 8px 32px rgba(0,0,0,0.6);text-align:center;
@@ -1822,14 +1822,22 @@ function processDictation(text, alternatives){
     return;
   }
 
+  // ── "voice stop" / "voice start" ──
+  if(raw.match(/voice stop|stop voice|stop listening/)){
+    toggleDictation();
+    showDictationResult('🔇 Voice stopped');
+    return;
+  }
+  if(raw.match(/voice start|start voice|start listening/)){
+    if(!dictationActive){ toggleDictation(); }
+    showDictationResult('🎙️ Voice started');
+    return;
+  }
+
   // ── "who's up" / "current batter" / "next batter" → announce next up ──
   if(raw.match(/who.?s up|current batter|next batter|who is up|whos up/)){
-    const team = voiceTeam;
-    const nb = getNextBatterInfo(team);
-    const teamLabel = team===0?'Home':'Away';
-    const playerName = nb.name || 'number '+nb.jersey;
-    const display = '#'+nb.jersey+(nb.name?' ('+nb.name+')':'')+' slot '+(nb.slot+1);
-    showDictationResult('🏏 '+teamLabel+' up: '+display, '#f5a623');
+    // Simulate button tap — speakNextBatter() uses active team and handles iOS audio
+    speakNextBatter();
     return;
   }
 
@@ -1987,6 +1995,7 @@ function processDictation(text, alternatives){
       buildScoresheet(activeTeam); updateTotalsBar(activeTeam); syncAllRunButtons(); updateScoreBadges();
       showDictationResult('✅ #' + jersey + ' out on bases (kept ' + curPlay + ')');
       checkThreeOuts(activeTeam, inn);
+      announceNextBatter(activeTeam, inn);
     } else {
       pl.innings[inn].play = (pl.innings[inn].play === cmd) ? '' : cmd;
       if(cmd==='homerun') pl.innings[inn].run = true;
@@ -1995,6 +2004,7 @@ function processDictation(text, alternatives){
       showDictationResult('✅ #' + jersey + ' → ' + cmd + (cmd==='homerun'?' + Run!':''));
       if(cmd==='out'||cmd==='strikeout') checkThreeOuts(activeTeam, inn);
       if(cmd==='homerun') checkFiveRuns(activeTeam, inn);
+      announceNextBatter(activeTeam, inn);
     }
   }
   save();
@@ -2356,12 +2366,17 @@ function getActiveTeam(){
   return 0;
 }
 
+function getTeamName(team){
+  const el = document.getElementById('teamName'+team);
+  return (el && el.value.trim()) ? el.value.trim() : (team===0 ? 'Home' : 'Away');
+}
+
 function speakNextBatter(){
   const team = getActiveTeam();
   const nb = getNextBatterInfo(team);
-  const teamLabel = team === 0 ? 'Home' : 'Away';
+  const teamLabel = getTeamName(team);
   const playerName = nb.name || 'number ' + nb.jersey;
-  const spokenText = teamLabel + ' team, batting order position ' + (nb.slot+1) + ', ' + playerName + '.';
+  const spokenText = teamLabel + ', batting order position ' + (nb.slot+1) + ', ' + playerName + '.';
   const display = '#'+nb.jersey+(nb.name?' ('+nb.name+')':'')+' slot '+(nb.slot+1);
   showDictationResult('🏏 ' + teamLabel + ' up: '+display, '#f5a623');
   // Called directly from tap — guaranteed user gesture on iOS
@@ -2375,6 +2390,34 @@ function speakNextBatter(){
   const local = voices.find(function(v){ return v.localService && v.lang.startsWith('en'); });
   if(local) utt.voice = local;
   window.speechSynthesis.speak(utt);
+}
+
+
+function announceNextBatter(team, inning){
+  // Find the next slot after the most recently played slot in current inning
+  const LINEUP = 9;
+  let lastPlayed = -1;
+  for(let slot = 0; slot < LINEUP; slot++){
+    const jersey = state.battingOrder[team][slot];
+    const pIdx = state.teams[team].findIndex(function(p){ return p.jersey === jersey; });
+    if(pIdx === -1) continue;
+    const inn = state.teams[team][pIdx].innings[inning];
+    if(inn.play !== '' || inn.baseOut){ lastPlayed = slot; }
+  }
+  if(lastPlayed === -1) return;
+  const nextSlot = (lastPlayed + 1) % LINEUP;
+  const nextJersey = state.battingOrder[team][nextSlot];
+  const pIdx2 = state.teams[team].findIndex(function(p){ return p.jersey === nextJersey; });
+  const nextName = (pIdx2 !== -1 && state.teams[team][pIdx2].name) ? state.teams[team][pIdx2].name : 'number '+nextJersey;
+  const teamLabel = getTeamName(team);
+  // Update visual highlight
+  state.nextBatterSlot[team] = nextSlot;
+  save();
+  buildScoresheet(team);
+  // Show toast update
+  setTimeout(function(){
+    showDictationResult('▶ Next: #'+nextJersey+' '+nextName+' ('+teamLabel+' slot '+(nextSlot+1)+')', '#f5a623');
+  }, 1200);
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────
