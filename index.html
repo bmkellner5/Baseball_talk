@@ -576,6 +576,9 @@ header h1{font-size:20px;font-weight:700;color:#f5a623;}
   <button class="nav-btn" id="nav-mic" onclick="toggleDictation()" aria-label="Voice dictation">
     <span class="nav-icon" id="mic-icon">🎙️</span><span id="mic-label">Voice</span>
   </button>
+  <button class="nav-btn" id="nav-speak" onclick="speakNextBatter()" aria-label="Speak next batter">
+    <span class="nav-icon">🔊</span><span>Who's Up</span>
+  </button>
 </nav>
 
 <!-- Play Modal -->
@@ -2338,6 +2341,30 @@ function speak(text){
   } else {
     setTimeout(_doSpeak, 100);
   }
+}
+
+
+function speakNextBatter(){
+  const nb0 = getNextBatterInfo(0);
+  const nb1 = getNextBatterInfo(1);
+  const homeName = nb0.name || 'number ' + nb0.jersey;
+  const awayName = nb1.name || 'number ' + nb1.jersey;
+  const spokenText = 'Home team, batting order position ' + (nb0.slot+1) + ', ' + homeName +
+    '. Away team, batting order position ' + (nb1.slot+1) + ', ' + awayName + '.';
+  const home = '#'+nb0.jersey+(nb0.name?' ('+nb0.name+')':'')+' slot '+(nb0.slot+1);
+  const away = '#'+nb1.jersey+(nb1.name?' ('+nb1.name+')':'')+' slot '+(nb1.slot+1);
+  showDictationResult('🏏 Home: '+home+' | Away: '+away, '#f5a623');
+  // Called directly from tap — guaranteed user gesture on iOS
+  if(!window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+  const utt = new SpeechSynthesisUtterance(spokenText);
+  utt.rate = 0.92;
+  utt.pitch = 1.0;
+  utt.volume = 1.0;
+  const voices = window.speechSynthesis.getVoices();
+  const local = voices.find(function(v){ return v.localService && v.lang.startsWith('en'); });
+  if(local) utt.voice = local;
+  window.speechSynthesis.speak(utt);
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────
