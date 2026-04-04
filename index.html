@@ -1597,6 +1597,12 @@ function processDictation(text, alternatives){
   // Word-to-digit
   const W2N = {one:'1',two:'2',three:'3',four:'4',five:'5',six:'6',seven:'7',
                eight:'8',nine:'9',ten:'10',eleven:'11',twelve:'12'};
+  // Ordinal-to-slot (batting order position)
+  const ORD2N = {first:'1',second:'2',third:'3',fourth:'4',fifth:'5',sixth:'6',
+                 seventh:'7',eighth:'8',ninth:'9',tenth:'10',eleventh:'11',twelfth:'12',
+                 '1st':'1','2nd':'2','3rd':'3','4th':'4','5th':'5','6th':'6',
+                 '7th':'7','8th':'8','9th':'9','10th':'10','11th':'11','12th':'12'};
+
   raw = raw.split(' ').map(function(w){ return W2N[w] !== undefined ? W2N[w] : w; }).join(' ');
 
   // ── Determine active batting team ──
@@ -1606,40 +1612,48 @@ function processDictation(text, alternatives){
   const bt1 = document.getElementById('batter-tab-1');
   if(bt1 && bt1.classList.contains('active')) voiceTeam = 1;
 
-  // ── Pending: waiting for jersey number after "add batter N" ──
-  if(pendingAddBatterSlot !== -1){
-    const digits = raw.match(/[0-9]{1,2}/);
-    if(digits){
-      const jersey = digits[0];
-      const slot = pendingAddBatterSlot;
-      const team = pendingAddBatterTeam;
-      pendingAddBatterSlot = -1; pendingAddBatterTeam = -1;
+  // ── "[ordinal/number] batter is [number] [jersey]" ──
+  // Matches: "first batter is number 2", "second batter is 7", "batter 3 is number 12"
+  // Step 1: resolve ordinal word to slot number
+  let batterIsMatch = null;
+  // Try ordinal word: "first batter is number 2"
+  const ordKeys = Object.keys(ORD2N);
+  for(let oi = 0; oi < ordKeys.length; oi++){
+    const ord = ordKeys[oi];
+    // Build regex: "[ord] batter is [optional: number/#] [jersey]"
+    if(raw.indexOf(ord) !== -1){
+      const re = new RegExp(ord + '\\s+batter\\s+is\\s+(?:number\\s+|#\\s*)?([0-9]{1,2})');
+      const m = raw.match(re);
+      if(m){ batterIsMatch = { slot: parseInt(ORD2N[ord]) - 1, jersey: m[1] }; break; }
+    }
+  }
+  // Try numeric slot: "batter 3 is number 12" or "3 batter is number 12"
+  if(!batterIsMatch){
+    const numSlotRe = raw.match(/(?:batter\s+)?([0-9]{1,2})\s+(?:batter\s+)?is\s+(?:number\s+|#\s*)?([0-9]{1,2})/);
+    if(numSlotRe && numSlotRe[1] !== numSlotRe[2]){
+      batterIsMatch = { slot: parseInt(numSlotRe[1]) - 1, jersey: numSlotRe[2] };
+    }
+  }
+
+  if(batterIsMatch){
+    const slot = batterIsMatch.slot;
+    const jersey = batterIsMatch.jersey;
+    if(slot >= 0 && slot < PLAYERS){
+      const team = voiceTeam;
       state.battingOrder[team][slot] = jersey;
+      // Find player and update Ptr# for current+future innings
       const pIdx = state.teams[team].findIndex(function(p){ return p.jersey === jersey; });
       if(pIdx !== -1 && state.activePitcher[team]){
         for(let i = activeInning[team]; i < INNINGS; i++)
           state.teams[team][pIdx].innings[i].pitcherJersey = state.activePitcher[team];
       }
       save(); buildLineupCards();
+      // Update both batters tab and home/away scoresheet
       buildScoresheet(team); syncAllRunButtons(); updateTotalsBar(team);
+      buildBatterPane(team);
+      // Navigate to batters tab and show correct team
       switchPage('batters'); switchBatterTeam(team);
       showDictationResult('✅ Slot '+(slot+1)+' → #'+jersey+(state.activePitcher[team]?' | Ptr#'+state.activePitcher[team]:''));
-    } else {
-      pendingAddBatterSlot = -1; pendingAddBatterTeam = -1;
-      showDictationResult('❌ Cancelled — no number heard', '#e74c3c');
-    }
-    return;
-  }
-
-  // ── "add batter 3" / "set batter 3" ──
-  // raw still has "batter" (FILLERS not yet applied)
-  const addMatch = raw.match(/(?:add|set)\s+(?:batter\s+)?([0-9]{1,2})/);
-  if(addMatch){
-    const slot = parseInt(addMatch[1]) - 1;
-    if(slot >= 0 && slot < PLAYERS){
-      pendingAddBatterSlot = slot;
-      pendingAddBatterTeam = voiceTeam;
-      showDictationResult('🎤 Slot '+(slot+1)+' ready — say the jersey number…', '#f5a623');
       return;
     }
   }
@@ -1658,6 +1672,7 @@ function processDictation(text, alternatives){
       }
       save(); buildLineupCards();
       buildScoresheet(voiceTeam); syncAllRunButtons(); updateTotalsBar(voiceTeam);
+      buildBatterPane(voiceTeam);
       switchPage('batters'); switchBatterTeam(voiceTeam);
       showDictationResult('✅ Slot '+(slot+1)+' → #'+jersey);
       return;
@@ -1700,7 +1715,7 @@ function processDictation(text, alternatives){
   if((hasSwitch || tokens.includes('team')) && (hasHome || hasAway)){
     const targetTeam = hasHome ? 0 : 1;
     const teamName = targetTeam === 0 ? 'Home' : 'Away';
-    ['home','away','pitchers','game'].forEach(function(pg){
+    ['home','away','pitchers','game','batters'].forEach(function(pg){
       const page = document.getElementById('page-' + pg);
       const btn = document.getElementById('nav-' + pg);
       if(page) page.classList.remove('active');
@@ -1720,7 +1735,7 @@ function processDictation(text, alternatives){
     if(/^[0-9]{1,2}$/.test(tok)){ jersey = tok; break; }
   }
   if(!jersey){
-    showDictationResult('❓ No number heard — say "7 ball" or "12 single"', '#f5a623');
+    showDictationResult('❓ No number heard — say "7 ball" or "first batter is number 7"', '#f5a623');
     return;
   }
 
@@ -1752,7 +1767,7 @@ function processDictation(text, alternatives){
   const ap = document.querySelector('.page.active');
   if(ap && ap.id === 'page-away') activeTeam = 1;
 
-  // Old pitcher pitch-count command (pitcher tab tracking)
+  // Pitcher pitch-count command (pitcher tab tracking: "11 pitcher ball")
   if(t.indexOf('pitcher') !== -1){
     let ptTeam = -1, ptIdx = -1;
     [0,1].forEach(function(team){
@@ -1821,6 +1836,8 @@ function processDictation(text, alternatives){
   }
   save();
 }
+
+
 
 
 
