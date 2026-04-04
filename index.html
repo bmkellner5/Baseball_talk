@@ -1592,114 +1592,97 @@ function showDictationResult(msg, color='#2ecc71'){
 function processDictation(text, alternatives){
   document.getElementById('dictation-transcript').textContent = '"' + text + '"';
 
-  let t = text.toLowerCase().trim();
+  let raw = text.toLowerCase().trim();
 
-  // Word-to-digit: map whole space-delimited tokens only
+  // Word-to-digit
   const W2N = {one:'1',two:'2',three:'3',four:'4',five:'5',six:'6',seven:'7',
                eight:'8',nine:'9',ten:'10',eleven:'11',twelve:'12'};
-  t = t.split(' ').map(w => W2N[w] !== undefined ? W2N[w] : w).join(' ');
+  raw = raw.split(' ').map(function(w){ return W2N[w] !== undefined ? W2N[w] : w; }).join(' ');
 
-  // ── Determine active team for batting order context ──
-  let voiceActiveTeam = 0;
-  const voiceActivePage = document.querySelector('.page.active');
-  if(voiceActivePage && voiceActivePage.id === 'page-away') voiceActiveTeam = 1;
-  // Also check batters tab sub-selection
-  const bTab1 = document.getElementById('batter-tab-1');
-  if(bTab1 && bTab1.classList.contains('active')) voiceActiveTeam = 1;
+  // ── Determine active batting team ──
+  let voiceTeam = 0;
+  const vap = document.querySelector('.page.active');
+  if(vap && vap.id === 'page-away') voiceTeam = 1;
+  const bt1 = document.getElementById('batter-tab-1');
+  if(bt1 && bt1.classList.contains('active')) voiceTeam = 1;
 
-  // ── Handle pending "add batter [slot]" — waiting for jersey number ──
+  // ── Pending: waiting for jersey number after "add batter N" ──
   if(pendingAddBatterSlot !== -1){
-    const numMatch = t.match(/(\d{1,2})/);
-    if(numMatch){
-      const jersey = numMatch[1];
+    const digits = raw.match(/[0-9]{1,2}/);
+    if(digits){
+      const jersey = digits[0];
       const slot = pendingAddBatterSlot;
       const team = pendingAddBatterTeam;
       pendingAddBatterSlot = -1; pendingAddBatterTeam = -1;
-      // Update batting order slot
       state.battingOrder[team][slot] = jersey;
-      // Propagate: find player with this jersey, update Ptr# for current+future innings
-      const pIdx = state.teams[team].findIndex(p => p.jersey === jersey);
+      const pIdx = state.teams[team].findIndex(function(p){ return p.jersey === jersey; });
       if(pIdx !== -1 && state.activePitcher[team]){
-        for(let i = activeInning[team]; i < INNINGS; i++){
+        for(let i = activeInning[team]; i < INNINGS; i++)
           state.teams[team][pIdx].innings[i].pitcherJersey = state.activePitcher[team];
-        }
       }
       save(); buildLineupCards();
       buildScoresheet(team); syncAllRunButtons(); updateTotalsBar(team);
-      // Switch to batters tab to show result
-      if(document.getElementById('page-batters')){
-        switchPage('batters');
-        switchBatterTeam(team);
-      }
-      showDictationResult('✅ Batting order slot '+(slot+1)+' → #'+jersey+(state.activePitcher[team]?' | Ptr #'+state.activePitcher[team]:''));
-      return;
+      switchPage('batters'); switchBatterTeam(team);
+      showDictationResult('✅ Slot '+(slot+1)+' → #'+jersey+(state.activePitcher[team]?' | Ptr#'+state.activePitcher[team]:''));
     } else {
       pendingAddBatterSlot = -1; pendingAddBatterTeam = -1;
       showDictationResult('❌ Cancelled — no number heard', '#e74c3c');
-      return;
     }
-  }
-
-  // ── "add batter [slot]" ──
-  // Matches: "add batter 3", "batting order 3", "set batter 3"
-  const addBatterMatch = t.match(/(?:add|set|batting order)\s+(?:batter\s+)?(\d{1,2})/);
-  if(addBatterMatch || t.match(/^(?:add|set)\s+(\d{1,2})$/) ){
-    const m = addBatterMatch || t.match(/^(?:add|set)\s+(\d{1,2})$/);
-    const slot = parseInt(m[1]) - 1;
-    if(slot >= 0 && slot < PLAYERS){
-      pendingAddBatterSlot = slot;
-      pendingAddBatterTeam = voiceActiveTeam;
-      showDictationResult('🎤 Batting slot '+(slot+1)+' — say the jersey number…', '#f5a623');
-      return;
-    }
-  }
-
-  // ── "change batter [slot] for [jersey]" or "change batter [slot] [jersey]" ──
-  const changeBatterMatch = t.match(/change\s+(?:batter\s+)?(\d{1,2})\s+(?:for\s+|to\s+|with\s+)?(\d{1,2})/);
-  if(changeBatterMatch){
-    const slot = parseInt(changeBatterMatch[1]) - 1;
-    const jersey = changeBatterMatch[2];
-    if(slot >= 0 && slot < PLAYERS){
-      const team = voiceActiveTeam;
-      state.battingOrder[team][slot] = jersey;
-      // Propagate pitcher to this new player for current+future innings
-      const pIdx = state.teams[team].findIndex(p => p.jersey === jersey);
-      if(pIdx !== -1 && state.activePitcher[team]){
-        for(let i = activeInning[team]; i < INNINGS; i++){
-          state.teams[team][pIdx].innings[i].pitcherJersey = state.activePitcher[team];
-        }
-      }
-      save(); buildLineupCards();
-      buildScoresheet(team); syncAllRunButtons(); updateTotalsBar(team);
-      if(document.getElementById('page-batters')){ switchPage('batters'); switchBatterTeam(team); }
-      showDictationResult('✅ Slot '+(slot+1)+' changed → #'+jersey);
-      return;
-    }
-  }
-
-  // ── "new pitcher [jersey]" or "pitcher [jersey]" (set active pitcher, not pitch count) ──
-  // Matches: "new pitcher 11", "pitcher 11", "pitcher number 11"
-  const newPitcherMatch = t.match(/(?:new\s+)?pitcher\s+(?:#\s*|number\s*)?(\d{1,2})/);
-  if(newPitcherMatch){
-    const pitcherJersey = newPitcherMatch[1];
-    // Batting team = opposite of the team whose pitcher this is
-    // We apply to the currently active batting team (voiceActiveTeam)
-    const battingTeam = voiceActiveTeam;
-    const fromInn = activeInning[battingTeam];
-    applyActivePitcher(battingTeam, pitcherJersey, fromInn);
-    if(document.getElementById('page-batters')){ switchPage('batters'); switchBatterTeam(battingTeam); }
-    showDictationResult('✅ Pitcher #'+pitcherJersey+' → all '+(battingTeam===0?'Home':'Away')+' batters from Inn.'+(fromInn+1));
     return;
   }
 
-  // Strip filler words (whole tokens only - no regex needed)
-  const FILLERS = new Set(['player','batter','number','jersey','the','a','an','no','#']);
-  t = t.split(' ').filter(w => !FILLERS.has(w)).join(' ').trim();
+  // ── "add batter 3" / "set batter 3" ──
+  // raw still has "batter" (FILLERS not yet applied)
+  const addMatch = raw.match(/(?:add|set)\s+(?:batter\s+)?([0-9]{1,2})/);
+  if(addMatch){
+    const slot = parseInt(addMatch[1]) - 1;
+    if(slot >= 0 && slot < PLAYERS){
+      pendingAddBatterSlot = slot;
+      pendingAddBatterTeam = voiceTeam;
+      showDictationResult('🎤 Slot '+(slot+1)+' ready — say the jersey number…', '#f5a623');
+      return;
+    }
+  }
 
-  // Inning switch: look for token "inning" followed by a digit token
+  // ── "change batter 3 for 12" / "change batter 3 to 12" ──
+  const chgMatch = raw.match(/change\s+(?:batter\s+)?([0-9]{1,2})\s+(?:for|to|with)\s+([0-9]{1,2})/);
+  if(chgMatch){
+    const slot = parseInt(chgMatch[1]) - 1;
+    const jersey = chgMatch[2];
+    if(slot >= 0 && slot < PLAYERS){
+      state.battingOrder[voiceTeam][slot] = jersey;
+      const pIdx = state.teams[voiceTeam].findIndex(function(p){ return p.jersey === jersey; });
+      if(pIdx !== -1 && state.activePitcher[voiceTeam]){
+        for(let i = activeInning[voiceTeam]; i < INNINGS; i++)
+          state.teams[voiceTeam][pIdx].innings[i].pitcherJersey = state.activePitcher[voiceTeam];
+      }
+      save(); buildLineupCards();
+      buildScoresheet(voiceTeam); syncAllRunButtons(); updateTotalsBar(voiceTeam);
+      switchPage('batters'); switchBatterTeam(voiceTeam);
+      showDictationResult('✅ Slot '+(slot+1)+' → #'+jersey);
+      return;
+    }
+  }
+
+  // ── "pitcher 11" / "new pitcher 11" → set active pitcher ──
+  const ptMatch = raw.match(/(?:new\s+)?pitcher\s+(?:number\s+|#\s*)?([0-9]{1,2})/);
+  if(ptMatch){
+    const pitcherJersey = ptMatch[1];
+    applyActivePitcher(voiceTeam, pitcherJersey, activeInning[voiceTeam]);
+    switchPage('batters'); switchBatterTeam(voiceTeam);
+    showDictationResult('✅ Pitcher #'+pitcherJersey+' set for '+(voiceTeam===0?'Home':'Away')+' batters from Inn.'+(activeInning[voiceTeam]+1));
+    return;
+  }
+
+  // ── Strip filler words for standard play commands ──
+  let t = raw;
+  const FILLERS = new Set(['player','batter','number','jersey','the','a','an','no','#']);
+  t = t.split(' ').filter(function(w){ return !FILLERS.has(w); }).join(' ').trim();
+
+  // Inning switch
   const tokens = t.split(' ');
   const innIdx = tokens.indexOf('inning');
-  if(innIdx !== -1 && tokens[innIdx+1] && /^\d+$/.test(tokens[innIdx+1])){
+  if(innIdx !== -1 && tokens[innIdx+1] && /^[0-9]+$/.test(tokens[innIdx+1])){
     const n = parseInt(tokens[innIdx+1]) - 1;
     if(n >= 0 && n < INNINGS){
       activeInning[0] = n; activeInning[1] = n;
@@ -1710,15 +1693,14 @@ function processDictation(text, alternatives){
     }
   }
 
-  // ── Team switch: "home team", "away team", "switch home", "switch away" ──
+  // Team switch
   const hasHome = tokens.includes('home') || tokens.includes('hometeam');
   const hasAway = tokens.includes('away') || tokens.includes('awayteam');
   const hasSwitch = tokens.includes('switch') || tokens.includes('change') || tokens.includes('go');
   if((hasSwitch || tokens.includes('team')) && (hasHome || hasAway)){
     const targetTeam = hasHome ? 0 : 1;
     const teamName = targetTeam === 0 ? 'Home' : 'Away';
-    // Switch the active page tab
-    ['home','away','pitchers','game'].forEach(pg => {
+    ['home','away','pitchers','game'].forEach(function(pg){
       const page = document.getElementById('page-' + pg);
       const btn = document.getElementById('nav-' + pg);
       if(page) page.classList.remove('active');
@@ -1732,17 +1714,17 @@ function processDictation(text, alternatives){
     return;
   }
 
-  // Find jersey number: first token that is purely digits
+  // Find jersey number
   let jersey = null;
   for(const tok of tokens){
-    if(/^\d{1,2}$/.test(tok)){ jersey = tok; break; }
+    if(/^[0-9]{1,2}$/.test(tok)){ jersey = tok; break; }
   }
   if(!jersey){
     showDictationResult('❓ No number heard — say "7 ball" or "12 single"', '#f5a623');
     return;
   }
 
-  // Find command: scan tokens for known command words
+  // Find command
   const CMD_MAP = {
     'ball':'ball','balls':'ball',
     'strike':'strike','strikes':'strike','strikeout':'strikeout','struck':'strikeout',
@@ -1750,7 +1732,7 @@ function processDictation(text, alternatives){
     'single':'single','1b':'single',
     'double':'double','2b':'double',
     'triple':'triple','3b':'triple',
-    'homer':'homerun','home':'homerun','homerun':'homerun','hr':'homerun',
+    'homer':'homerun','homerun':'homerun','hr':'homerun',
     'out':'out','fly':'out','ground':'out','pop':'out',
     'walk':'walk','bb':'walk',
     'error':'error',
@@ -1770,11 +1752,11 @@ function processDictation(text, alternatives){
   const ap = document.querySelector('.page.active');
   if(ap && ap.id === 'page-away') activeTeam = 1;
 
-  // Pitcher command
+  // Old pitcher pitch-count command (pitcher tab tracking)
   if(t.indexOf('pitcher') !== -1){
     let ptTeam = -1, ptIdx = -1;
-    [0,1].forEach(team => {
-      state.pitchers[team].forEach((p,i) => {
+    [0,1].forEach(function(team){
+      state.pitchers[team].forEach(function(p,i){
         if(p.jersey === jersey){ ptTeam = team; ptIdx = i; }
       });
     });
@@ -1796,10 +1778,10 @@ function processDictation(text, alternatives){
 
   // Batter command
   const inn = activeInning[activeTeam];
-  let pIdx = state.teams[activeTeam].findIndex(p => p.jersey === jersey);
+  let pIdx = state.teams[activeTeam].findIndex(function(p){ return p.jersey === jersey; });
   if(pIdx === -1){
     const other = 1 - activeTeam;
-    const oIdx = state.teams[other].findIndex(p => p.jersey === jersey);
+    const oIdx = state.teams[other].findIndex(function(p){ return p.jersey === jersey; });
     if(oIdx !== -1){
       showDictationResult('❓ #' + jersey + ' is on ' + (other===0?'Home':'Away') + ' tab — switch tabs first', '#f5a623');
     } else {
@@ -1839,6 +1821,8 @@ function processDictation(text, alternatives){
   }
   save();
 }
+
+
 
 
 // ── Three Outs Chime (Web Audio API) ─────────────────────────────────────
