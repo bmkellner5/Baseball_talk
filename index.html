@@ -830,41 +830,45 @@ function buildScoresheet(team){
   hdr.className='row-grid table-header';
   hdr.innerHTML='<div style="color:#8e8e93;font-size:10px">#</div><div class="lbl">Player</div><div>Pos</div><div>Play</div><div>R</div><div style="text-align:center;color:#2ecc71">Balls</div><div style="text-align:center;color:#e74c3c">Strikes</div><div style="text-align:center;color:#9b59b6;font-size:10px" title="Opposing pitcher jersey">Ptr#</div>';
   container.appendChild(hdr);
-  for(let p=0;p<PLAYERS;p++){
+  for(let slot=0;slot<PLAYERS;slot++){
+    // Render in batting order sequence: find player by jersey from battingOrder
+    const orderJersey = state.battingOrder[team][slot];
+    let p = state.teams[team].findIndex(function(pl){return pl.jersey===orderJersey;});
+    if(p===-1) p=slot; // fallback to slot index if jersey not found
     const row=document.createElement('div');
     row.className='row-grid player-row';
     const numD=document.createElement('input');
     numD.className='jersey-input';
     numD.type='text';numD.maxLength=2;numD.placeholder='#';
     numD.value=state.teams[team][p].jersey||'';
-    numD.addEventListener('input',e=>{state.teams[team][p].jersey=e.target.value;save();});
+    numD.addEventListener('input',(function(pi){return function(e){state.teams[team][pi].jersey=e.target.value;save();};})(p));
     const nameIn=document.createElement('input');
-    nameIn.className='player-name-input';nameIn.placeholder='Player '+(p+1);
+    nameIn.className='player-name-input';nameIn.placeholder='Player '+(slot+1);
     nameIn.value=state.teams[team][p].name;
-    nameIn.addEventListener('input',e=>{state.teams[team][p].name=e.target.value;save();});
+    nameIn.addEventListener('input',(function(pi){return function(e){state.teams[team][pi].name=e.target.value;save();};})(p));
     const posIn=document.createElement('input');
     posIn.className='pos-input';posIn.placeholder='POS';posIn.maxLength=3;
     posIn.value=state.teams[team][p].pos;
-    posIn.addEventListener('input',e=>{state.teams[team][p].pos=e.target.value.toUpperCase();save();});
+    posIn.addEventListener('input',(function(pi){return function(e){state.teams[team][pi].pos=e.target.value.toUpperCase();save();};})(p));
     const playCell=document.createElement('div');
     playCell.className='play-cell';
     const play=state.teams[team][p].innings[inn].play;
     if(play){playCell.classList.add(play);playCell.textContent=playLabels[play];}
     else playCell.textContent='—';
-    playCell.addEventListener('click',()=>openModal(team,p));
+    playCell.addEventListener('click',(function(pi){return function(){openModal(team,pi);};})(p));
     const runBtn=document.createElement('div');
     runBtn.className='run-toggle'+(state.teams[team][p].innings[inn].run?' scored':'');
     runBtn.textContent='R';
     runBtn.dataset.team=team;
     runBtn.dataset.player=p;
     runBtn.dataset.inning=inn;
-    runBtn.addEventListener('click',()=>{
-      state.teams[team][p].innings[inn].run=!state.teams[team][p].innings[inn].run;
-      runBtn.className='run-toggle'+(state.teams[team][p].innings[inn].run?' scored':'');
+    runBtn.addEventListener('click',(function(pi,rb){return function(){
+      state.teams[team][pi].innings[inn].run=!state.teams[team][pi].innings[inn].run;
+      rb.className='run-toggle'+(state.teams[team][pi].innings[inn].run?' scored':'');
       refreshRunColors(team,inn);
       updateScoreBadges();save();
       checkFiveRuns(team,inn);
-    });
+    };})(p,runBtn));
     // Balls counter (max 4)
     const ballsWrap=makeBatterCounter(team,p,inn,'balls',4,'#2ecc71',true);
     // Strikes counter (max 3)
@@ -878,11 +882,11 @@ function buildScoresheet(team){
     pjIn.type='text';pjIn.maxLength=2;pjIn.placeholder='#';
     pjIn.className='pitcher-jersey-cell';
     pjIn.value=state.teams[team][p].innings[inn].pitcherJersey||'';
-    pjIn.addEventListener('input',e=>{
-      state.teams[team][p].innings[inn].pitcherJersey=e.target.value;
+    pjIn.addEventListener('input',(function(pi){return function(e){
+      state.teams[team][pi].innings[inn].pitcherJersey=e.target.value;
       syncAllPitcherTotals();
       save();
-    });
+    };})(p));
     pjWrap.appendChild(pjIn);
     row.appendChild(playCell);row.appendChild(runBtn);row.appendChild(ballsWrap);row.appendChild(strikesWrap);row.appendChild(pjWrap);
 
@@ -1958,7 +1962,10 @@ function buildBatterPane(team){
   const container = document.getElementById('batter-stats-'+team) || document.getElementById('batters-pane-'+team);
   container.innerHTML='';
   const isAway = team===1;
-  state.teams[team].forEach((pl,p)=>{
+  const _battingSeq=state.battingOrder[team].map(j=>state.teams[team].findIndex(pl=>pl.jersey===j));
+  _battingSeq.forEach((p)=>{
+    if(p===-1) return;
+    const pl=state.teams[team][p];
     const stats = calcBatterStats(team,p);
     const card = document.createElement('div');
     card.className='batter-card';
@@ -2020,10 +2027,19 @@ function applyActivePitcher(battingTeam, pitcherJersey, fromInning){
   state.activePitcherFromInning[battingTeam] = fromInning;
   for(let slot=0; slot<PLAYERS; slot++){
     const jersey = state.battingOrder[battingTeam][slot];
-    const pIdx = state.teams[battingTeam].findIndex(p=>p.jersey===jersey);
+    const pIdx = state.teams[battingTeam].findIndex(function(p){return p.jersey===jersey;});
     if(pIdx === -1) continue;
     for(let i=fromInning; i<INNINGS; i++){
-      state.teams[battingTeam][pIdx].innings[i].pitcherJersey = pitcherJersey;
+      // Current inning: only update if batter has no balls AND no strikes yet
+      // Future innings: always set (clean slate)
+      const inn = state.teams[battingTeam][pIdx].innings[i];
+      if(i === fromInning){
+        if((inn.balls||0) === 0 && (inn.strikes||0) === 0){
+          inn.pitcherJersey = pitcherJersey;
+        }
+      } else {
+        inn.pitcherJersey = pitcherJersey;
+      }
     }
   }
   save();
