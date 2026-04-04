@@ -862,7 +862,7 @@ function buildScoresheet(team){
     let p = state.teams[team].findIndex(function(pl){return pl.jersey===orderJersey;});
     if(p===-1) p=slot; // fallback to slot index if jersey not found
     const row=document.createElement('div');
-    const isNextUpRow = (slot === state.nextBatterSlot[team] && slot < 9 && activeInning[team] > 0);
+    const isNextUpRow = (slot === state.nextBatterSlot[team] && slot < 9);
     row.className='row-grid player-row'+(isNextUpRow?' next-up-row':'');
     const numD=document.createElement('input');
     numD.className='jersey-input';
@@ -898,7 +898,7 @@ function buildScoresheet(team){
       save(); buildLineupCards(); buildScoresheet(team);
     };})(p));
     const nameIn=document.createElement('input');
-    const isNextUp = (slot === state.nextBatterSlot[team] && slot < 9 && activeInning[team] > 0);
+    const isNextUp = (slot === state.nextBatterSlot[team] && slot < 9);
     nameIn.className='player-name-input'+(isNextUp?' next-up-input':'');
     nameIn.placeholder='Player '+(slot+1);
     nameIn.value=state.teams[team][p].name;
@@ -1361,6 +1361,13 @@ function confirmReset(){
       for(let p=0;p<PITCHERS;p++) state.pitchers[t][p]=freshPitcher();
     }
     activeInning=[0,0];
+    state.nextBatterSlot=[0,0];
+    state.activePitcher=['',''];
+    state.activePitcherFromInning=[0,0];
+    state.battingOrder=[
+      Array.from({length:PLAYERS},(_,i)=>String(i+1)),
+      Array.from({length:PLAYERS},(_,i)=>String(i+1))
+    ];
     buildScoresheet(0);buildScoresheet(1);buildBattersPage();buildLineupCards();buildPitchersPage();
     ['teamName0','teamName1','gameDate','gameLocation'].forEach(id=>document.getElementById(id).value='');
     try{localStorage.removeItem('bss3');localStorage.removeItem('bss3_info');}catch(e){}
