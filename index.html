@@ -1954,7 +1954,7 @@ function processDictation(text, alternatives){
   }
 
   // ── "how many outs" ──────────────────────────────────────────────────────
-  if(raw.match(/how many outs?|out count|outs? count|count outs?|outs? in (?:the )?inning/)){
+  if(raw.match(/how many outs?|how many doubt|many out|out count|outs? count|count outs?|outs? in (?:the )?inning|number of outs?/)){
     const team = voiceTeam;
     const inn = activeInning[team];
     const outs = state.teams[team].reduce(function(n, pl){
@@ -2045,7 +2045,7 @@ function processDictation(text, alternatives){
   }
   if(!jersey){
     // Try to match a player name using rawOriginal (before W2N mangles name words)
-    const teamPlayers = state.teams[activeTeam];
+    const teamPlayers = state.teams[voiceTeam];
     let bestMatch = null, bestLen = 0;
     for(let pi = 0; pi < PLAYERS; pi++){
       const pname = teamPlayers[pi].name;
@@ -2057,6 +2057,22 @@ function processDictation(text, alternatives){
       }
     }
     if(bestMatch){ jersey = bestMatch; }
+    // Cross-team fallback: search the other team if not found on voiceTeam
+    if(!bestMatch){
+      const otherTeam = 1 - voiceTeam;
+      const otherPlayers = state.teams[otherTeam];
+      for(let pi2 = 0; pi2 < PLAYERS; pi2++){
+        const pname2 = otherPlayers[pi2].name;
+        if(!pname2) continue;
+        const pname2Lower = pname2.toLowerCase();
+        if(rawOriginal.indexOf(pname2Lower) !== -1 && pname2Lower.length > bestLen){
+          bestMatch = otherPlayers[pi2].jersey;
+          bestLen = pname2Lower.length;
+          voiceTeam = otherTeam;
+        }
+      }
+      if(bestMatch){ jersey = bestMatch; }
+    }
   }
   if(!jersey){
     showDictationResult('❓ No player heard — say "7 ball" or "Zeke strike"', '#f5a623');
@@ -2090,6 +2106,8 @@ function processDictation(text, alternatives){
   let activeTeam = 0;
   const ap = document.querySelector('.page.active');
   if(ap && ap.id === 'page-away') activeTeam = 1;
+  // Sync activeTeam with voiceTeam in case name-matching switched teams
+  activeTeam = voiceTeam;
 
   // Pitcher pitch-count command (pitcher tab tracking: "11 pitcher ball")
   if(t.indexOf('pitcher') !== -1 || t.indexOf('picture') !== -1){
