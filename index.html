@@ -494,8 +494,20 @@ header h1{font-size:20px;font-weight:700;color:#f5a623;}
     <button class="pitchers-team-tab active" id="batter-tab-0" onclick="switchBatterTeam(0)">🔵 Home Batters</button>
     <button class="pitchers-team-tab" id="batter-tab-1" onclick="switchBatterTeam(1)">🔴 Away Batters</button>
   </div>
-  <div class="pitchers-pane active" id="batters-pane-0"></div>
-  <div class="pitchers-pane" id="batters-pane-1"></div>
+  <div class="pitchers-pane active" id="batters-pane-0">
+    <div style="background:#1c1c1e;border-radius:10px;margin:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.4);">
+      <div style="padding:6px 12px;background:#0a2240;border-bottom:2px solid #3498db;font-size:12px;font-weight:800;color:#3498db;letter-spacing:1px;">📋 BATTING ORDER &amp; PITCHER</div>
+      <div id="lineup-card-0"></div>
+    </div>
+    <div id="batter-stats-0"></div>
+  </div>
+  <div class="pitchers-pane" id="batters-pane-1">
+    <div style="background:#1c1c1e;border-radius:10px;margin:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.4);">
+      <div style="padding:6px 12px;background:#240a0a;border-bottom:2px solid #e74c3c;font-size:12px;font-weight:800;color:#e74c3c;letter-spacing:1px;">📋 BATTING ORDER &amp; PITCHER</div>
+      <div id="lineup-card-1"></div>
+    </div>
+    <div id="batter-stats-1"></div>
+  </div>
 </div>
 
 <!-- ── GAME SUMMARY PAGE ── -->
@@ -515,6 +527,19 @@ header h1{font-size:20px;font-weight:700;color:#f5a623;}
   <div id="dictation-status" style="font-size:13px;color:#f2f2f7;font-weight:600;margin-bottom:4px;">🎙️ Listening...</div>
   <div id="dictation-transcript" style="font-size:11px;color:#8e8e93;min-height:16px;font-style:italic;"></div>
   <div id="dictation-result" style="font-size:11px;color:#2ecc71;min-height:16px;margin-top:2px;font-weight:700;"></div>
+  <div style="margin-top:6px;border-top:1px solid #3a3a3c;padding-top:5px;">
+    <div onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'" style="font-size:10px;color:#636366;cursor:pointer;user-select:none;">📋 Voice Commands ▾</div>
+    <div style="display:none;text-align:left;margin-top:4px;">
+      <div style="font-size:9.5px;color:#aeaeb2;line-height:1.7;">
+        <b style="color:#f5a623;">Batting Order:</b><br>
+        "add batter 3" → say jersey #<br>
+        "change batter 3 for 12"<br>
+        <b style="color:#9b59b6;">Pitcher:</b><br>
+        "pitcher 11" or "new pitcher 11"<br>
+        <b style="color:#2ecc71;">Plays:</b> "7 single" · "12 ball" · "9 out"
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- Bottom Nav -->
@@ -578,6 +603,8 @@ if('serviceWorker' in navigator){
 const INNINGS=6,PLAYERS=12,PITCHERS=6;
 let activeInning=[0,0]; // per team
 let pendingCell=null;
+let pendingAddBatterSlot=-1;
+let pendingAddBatterTeam=-1;
 let swapMode=false;
 let swapTeam=-1;
 let swapFirst=-1; // first player index selected
@@ -599,7 +626,13 @@ const state={
   pitchers:[
     Array.from({length:PITCHERS},freshPitcher),
     Array.from({length:PITCHERS},freshPitcher)
-  ]
+  ],
+  battingOrder:[
+    Array.from({length:PLAYERS},(_,i)=>String(i+1)),
+    Array.from({length:PLAYERS},(_,i)=>String(i+1))
+  ],
+  activePitcher:['',''],
+  activePitcherFromInning:[0,0]
 };
 
 // ── Persist ───────────────────────────────────────────────────────────────
@@ -653,6 +686,13 @@ function loadSaved(){
     if(gi.loc)  document.getElementById('gameLocation').value=gi.loc;
     if(gi.n0)   document.getElementById('teamName0').value=gi.n0;
     if(gi.n1)   document.getElementById('teamName1').value=gi.n1;
+    if(s.battingOrder){
+      for(let t2=0;t2<2;t2++){
+        if(s.battingOrder[t2]) state.battingOrder[t2]=s.battingOrder[t2].map(j=>String(j||''));
+      }
+    }
+    if(s.activePitcher) state.activePitcher=s.activePitcher.map(j=>String(j||''));
+    if(s.activePitcherFromInning) state.activePitcherFromInning=[...s.activePitcherFromInning];
   }catch(e){}
 }
 ['gameDate','gameLocation','teamName0','teamName1'].forEach(id=>{
@@ -666,7 +706,7 @@ function switchPage(page){
   document.getElementById('page-'+page).classList.add('active');
   document.getElementById('nav-'+page).classList.add('active');
   if(page==='home'){ buildScoresheet(0); updateTotalsBar(0); syncAllRunButtons(); }
-  if(page==='batters'){ buildBattersPage(); }
+  if(page==='batters'){ buildBattersPage(); buildLineupCards(); }
   if(page==='away'){ buildScoresheet(1); updateTotalsBar(1); syncAllRunButtons(); }
   if(page==='game') buildGameSummary();
   if(page==='pitchers') syncAllPitcherTotals();
@@ -1215,7 +1255,7 @@ function confirmReset(){
       for(let p=0;p<PITCHERS;p++) state.pitchers[t][p]=freshPitcher();
     }
     activeInning=[0,0];
-    buildScoresheet(0);buildScoresheet(1);buildBattersPage();buildPitchersPage();
+    buildScoresheet(0);buildScoresheet(1);buildBattersPage();buildLineupCards();buildPitchersPage();
     ['teamName0','teamName1','gameDate','gameLocation'].forEach(id=>document.getElementById(id).value='');
     try{localStorage.removeItem('bss3');localStorage.removeItem('bss3_info');}catch(e){}
     updateHeaderSub();updateScoreBadges();
@@ -1559,6 +1599,99 @@ function processDictation(text, alternatives){
                eight:'8',nine:'9',ten:'10',eleven:'11',twelve:'12'};
   t = t.split(' ').map(w => W2N[w] !== undefined ? W2N[w] : w).join(' ');
 
+  // ── Determine active team for batting order context ──
+  let voiceActiveTeam = 0;
+  const voiceActivePage = document.querySelector('.page.active');
+  if(voiceActivePage && voiceActivePage.id === 'page-away') voiceActiveTeam = 1;
+  // Also check batters tab sub-selection
+  const bTab1 = document.getElementById('batter-tab-1');
+  if(bTab1 && bTab1.classList.contains('active')) voiceActiveTeam = 1;
+
+  // ── Handle pending "add batter [slot]" — waiting for jersey number ──
+  if(pendingAddBatterSlot !== -1){
+    const numMatch = t.match(/(\d{1,2})/);
+    if(numMatch){
+      const jersey = numMatch[1];
+      const slot = pendingAddBatterSlot;
+      const team = pendingAddBatterTeam;
+      pendingAddBatterSlot = -1; pendingAddBatterTeam = -1;
+      // Update batting order slot
+      state.battingOrder[team][slot] = jersey;
+      // Propagate: find player with this jersey, update Ptr# for current+future innings
+      const pIdx = state.teams[team].findIndex(p => p.jersey === jersey);
+      if(pIdx !== -1 && state.activePitcher[team]){
+        for(let i = activeInning[team]; i < INNINGS; i++){
+          state.teams[team][pIdx].innings[i].pitcherJersey = state.activePitcher[team];
+        }
+      }
+      save(); buildLineupCards();
+      buildScoresheet(team); syncAllRunButtons(); updateTotalsBar(team);
+      // Switch to batters tab to show result
+      if(document.getElementById('page-batters')){
+        switchPage('batters');
+        switchBatterTeam(team);
+      }
+      showDictationResult('✅ Batting order slot '+(slot+1)+' → #'+jersey+(state.activePitcher[team]?' | Ptr #'+state.activePitcher[team]:''));
+      return;
+    } else {
+      pendingAddBatterSlot = -1; pendingAddBatterTeam = -1;
+      showDictationResult('❌ Cancelled — no number heard', '#e74c3c');
+      return;
+    }
+  }
+
+  // ── "add batter [slot]" ──
+  // Matches: "add batter 3", "batting order 3", "set batter 3"
+  const addBatterMatch = t.match(/(?:add|set|batting order)\s+(?:batter\s+)?(\d{1,2})/);
+  if(addBatterMatch || t.match(/^(?:add|set)\s+(\d{1,2})$/) ){
+    const m = addBatterMatch || t.match(/^(?:add|set)\s+(\d{1,2})$/);
+    const slot = parseInt(m[1]) - 1;
+    if(slot >= 0 && slot < PLAYERS){
+      pendingAddBatterSlot = slot;
+      pendingAddBatterTeam = voiceActiveTeam;
+      showDictationResult('🎤 Batting slot '+(slot+1)+' — say the jersey number…', '#f5a623');
+      return;
+    }
+  }
+
+  // ── "change batter [slot] for [jersey]" or "change batter [slot] [jersey]" ──
+  const changeBatterMatch = t.match(/change\s+(?:batter\s+)?(\d{1,2})\s+(?:for\s+|to\s+|with\s+)?(\d{1,2})/);
+  if(changeBatterMatch){
+    const slot = parseInt(changeBatterMatch[1]) - 1;
+    const jersey = changeBatterMatch[2];
+    if(slot >= 0 && slot < PLAYERS){
+      const team = voiceActiveTeam;
+      state.battingOrder[team][slot] = jersey;
+      // Propagate pitcher to this new player for current+future innings
+      const pIdx = state.teams[team].findIndex(p => p.jersey === jersey);
+      if(pIdx !== -1 && state.activePitcher[team]){
+        for(let i = activeInning[team]; i < INNINGS; i++){
+          state.teams[team][pIdx].innings[i].pitcherJersey = state.activePitcher[team];
+        }
+      }
+      save(); buildLineupCards();
+      buildScoresheet(team); syncAllRunButtons(); updateTotalsBar(team);
+      if(document.getElementById('page-batters')){ switchPage('batters'); switchBatterTeam(team); }
+      showDictationResult('✅ Slot '+(slot+1)+' changed → #'+jersey);
+      return;
+    }
+  }
+
+  // ── "new pitcher [jersey]" or "pitcher [jersey]" (set active pitcher, not pitch count) ──
+  // Matches: "new pitcher 11", "pitcher 11", "pitcher number 11"
+  const newPitcherMatch = t.match(/(?:new\s+)?pitcher\s+(?:#\s*|number\s*)?(\d{1,2})/);
+  if(newPitcherMatch){
+    const pitcherJersey = newPitcherMatch[1];
+    // Batting team = opposite of the team whose pitcher this is
+    // We apply to the currently active batting team (voiceActiveTeam)
+    const battingTeam = voiceActiveTeam;
+    const fromInn = activeInning[battingTeam];
+    applyActivePitcher(battingTeam, pitcherJersey, fromInn);
+    if(document.getElementById('page-batters')){ switchPage('batters'); switchBatterTeam(battingTeam); }
+    showDictationResult('✅ Pitcher #'+pitcherJersey+' → all '+(battingTeam===0?'Home':'Away')+' batters from Inn.'+(fromInn+1));
+    return;
+  }
+
   // Strip filler words (whole tokens only - no regex needed)
   const FILLERS = new Set(['player','batter','number','jersey','the','a','an','no','#']);
   t = t.split(' ').filter(w => !FILLERS.has(w)).join(' ').trim();
@@ -1821,7 +1954,7 @@ function calcBatterStats(team, playerIdx){
 }
 
 function buildBatterPane(team){
-  const container = document.getElementById('batters-pane-'+team);
+  const container = document.getElementById('batter-stats-'+team) || document.getElementById('batters-pane-'+team);
   container.innerHTML='';
   const isAway = team===1;
   state.teams[team].forEach((pl,p)=>{
@@ -1876,12 +2009,79 @@ function buildBatterPane(team){
 function buildBattersPage(){
   buildBatterPane(0);
   buildBatterPane(1);
+  buildLineupCards();
+}
+
+// ── Batting Order & Pitcher Tracking ──────────────────────────────────────
+
+function applyActivePitcher(battingTeam, pitcherJersey, fromInning){
+  state.activePitcher[battingTeam] = pitcherJersey;
+  state.activePitcherFromInning[battingTeam] = fromInning;
+  for(let slot=0; slot<PLAYERS; slot++){
+    const jersey = state.battingOrder[battingTeam][slot];
+    const pIdx = state.teams[battingTeam].findIndex(p=>p.jersey===jersey);
+    if(pIdx === -1) continue;
+    for(let i=fromInning; i<INNINGS; i++){
+      state.teams[battingTeam][pIdx].innings[i].pitcherJersey = pitcherJersey;
+    }
+  }
+  save();
+  buildScoresheet(battingTeam); syncAllRunButtons();
+  buildLineupCards();
+}
+
+function buildLineupCard(team){
+  const container = document.getElementById('lineup-card-'+team);
+  if(!container) return;
+  const accentColor = team===1 ? '#e74c3c' : '#3498db';
+  const pitcher = state.activePitcher[team];
+  const fromInn = state.activePitcherFromInning[team];
+  let h = '<div style="padding:8px 12px;background:'+(team===1?'#240a0a':'#0a1a2a')+';border-bottom:1px solid #3a3a3c;">' +
+    '<div style="font-size:10px;color:#8e8e93;margin-bottom:4px;">CURRENT PITCHER (vs '+(team===0?'Home':'Away')+' Batters)</div>' +
+    '<div style="font-size:16px;font-weight:900;color:'+accentColor+';">' +
+    (pitcher ? '#'+pitcher+' <span style="font-size:11px;color:#8e8e93;">(from Inn.'+(fromInn+1)+')</span>' : '<span style="font-size:12px;color:#636366;">None — say "Pitcher #11"</span>') +
+    '</div></div>';
+  h += '<div style="display:grid;grid-template-columns:32px 48px 1fr 60px;background:#2c2c2e;">' +
+    '<div style="padding:4px;text-align:center;font-size:9px;color:#8e8e93;">Slot</div>' +
+    '<div style="padding:4px;text-align:center;font-size:9px;color:#8e8e93;">#</div>' +
+    '<div style="padding:4px;font-size:9px;color:#8e8e93;">Player</div>' +
+    '<div style="padding:4px;text-align:center;font-size:9px;color:#8e8e93;">Ptr#</div>' +
+    '</div>';
+  for(let slot=0; slot<PLAYERS; slot++){
+    const jersey = state.battingOrder[team][slot];
+    const pIdx = state.teams[team].findIndex(p=>p.jersey===jersey);
+    const player = pIdx>=0 ? state.teams[team][pIdx] : null;
+    const name = player ? (player.name||'#'+jersey) : '—';
+    const inn = activeInning[team];
+    const ptr = player ? (state.teams[team][pIdx].innings[inn].pitcherJersey||'—') : '—';
+    const bg = slot%2===0 ? '#1c1c1e' : '#232325';
+    h += '<div style="display:grid;grid-template-columns:32px 48px 1fr 60px;background:'+bg+';border-bottom:1px solid #2a2a2c;">' +
+      '<div style="padding:5px 4px;text-align:center;font-size:12px;font-weight:700;color:'+accentColor+';">'+(slot+1)+'</div>' +
+      '<div style="padding:5px 4px;text-align:center;font-size:13px;font-weight:800;color:#f5a623;">'+(jersey?'#'+jersey:'—')+'</div>' +
+      '<div style="padding:5px 4px;font-size:11px;color:#ccc;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">'+name+'</div>' +
+      '<div style="padding:5px 4px;text-align:center;font-size:12px;color:#9b59b6;font-weight:700;">'+(ptr!=='—'?'#'+ptr:ptr)+'</div>' +
+      '</div>';
+  }
+  container.innerHTML = h;
+}
+
+function buildLineupCards(){
+  buildLineupCard(0);
+  buildLineupCard(1);
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────
 loadSaved();
+// Sync battingOrder slots to actual team jerseys (handles first-load upgrade)
+for(let t=0;t<2;t++){
+  for(let s=0;s<PLAYERS;s++){
+    if(!state.battingOrder[t][s] || state.battingOrder[t][s]===''){
+      state.battingOrder[t][s] = state.teams[t][s].jersey || String(s+1);
+    }
+  }
+}
 buildInningBtns(0);buildInningBtns(1);
-buildScoresheet(0);buildScoresheet(1);buildBattersPage();
+buildScoresheet(0);buildScoresheet(1);buildBattersPage();buildLineupCards();
 syncAllPitcherTotals();
 syncAllPitcherTotals();
 updateHeaderSub();updateScoreBadges();
