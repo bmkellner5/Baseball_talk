@@ -1670,6 +1670,7 @@ function toggleDictation(){
 function startDictation(){
   if(!recognition && !initDictation()) return;
   dictationActive = true;
+  requestWakeLock();
   document.getElementById('dictation-toast').style.display = 'block';
   document.getElementById('dictation-status').textContent = '🎙️ Listening...';
   document.getElementById('dictation-transcript').textContent = '';
@@ -2426,6 +2427,32 @@ function announceNextBatter(team, inning){
     showDictationResult('▶ Next: #'+nextJersey+' '+nextName+' ('+teamLabel+' slot '+(nextSlot+1)+')', '#f5a623');
   }, 1200);
 }
+
+
+// ── Screen Wake Lock ───────────────────────────────────────────────────────
+let _wakeLock = null;
+
+async function requestWakeLock(){
+  if(!('wakeLock' in navigator)) return;
+  try{
+    _wakeLock = await navigator.wakeLock.request('screen');
+    _wakeLock.addEventListener('release', function(){
+      _wakeLock = null;
+    });
+  }catch(e){ /* user denied or not supported */ }
+}
+
+function releaseWakeLock(){
+  if(_wakeLock){ _wakeLock.release(); _wakeLock = null; }
+}
+
+// Re-acquire wake lock when page becomes visible again (iOS releases it on background)
+document.addEventListener('visibilitychange', function(){
+  if(document.visibilityState === 'visible') requestWakeLock();
+});
+
+// Request on page load
+requestWakeLock();
 
 // ── Init ──────────────────────────────────────────────────────────────────
 loadSaved();
