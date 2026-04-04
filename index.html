@@ -1914,6 +1914,44 @@ function processDictation(text, alternatives){
     return;
   }
 
+  // ── "what is the count" ──────────────────────────────────────────────────
+  if(raw.match(/what(?:'s| is) the count|current count|the count/)){
+    const team = voiceTeam;
+    const inn = activeInning[team];
+    const slot = state.nextBatterSlot[team];
+    const jersey = state.battingOrder[team][slot];
+    const pIdx = state.teams[team].findIndex(function(p){ return p.jersey === jersey; });
+    if(pIdx === -1){ showDictationResult('⚠️ No current batter set', '#e74c3c'); return; }
+    const pl = state.teams[team][pIdx];
+    const balls = pl.innings[inn].balls || 0;
+    const strikes = pl.innings[inn].strikes || 0;
+    const playerLabel = pl.name || ('#' + jersey);
+    const teamLabel = getTeamName(team);
+    const spokenText = playerLabel + ', ' + balls + ' and ' + strikes + '.';
+    const display = playerLabel + ': ' + balls + ' ball' + (balls !== 1 ? 's' : '') + ', ' + strikes + ' strike' + (strikes !== 1 ? 's' : '');
+    showDictationResult('⚾ ' + display, '#9b59b6');
+    speakText(spokenText);
+    return;
+  }
+
+  // ── "how many outs" ──────────────────────────────────────────────────────
+  if(raw.match(/how many outs|outs? count|count outs?|outs? in (?:the )?inning/)){
+    const team = voiceTeam;
+    const inn = activeInning[team];
+    const outs = state.teams[team].reduce(function(n, pl){
+      const p = pl.innings[inn].play;
+      const bo = pl.innings[inn].baseOut || false;
+      return n + (p === 'out' || p === 'strikeout' || bo ? 1 : 0);
+    }, 0);
+    const teamLabel = getTeamName(team);
+    const innLabel = inn + 1;
+    const outsWord = outs === 1 ? '1 out' : outs + ' outs';
+    const spokenText = teamLabel + ', inning ' + innLabel + ', ' + outsWord + '.';
+    showDictationResult('🔢 ' + teamLabel + ' Inn.' + innLabel + ': ' + outsWord, '#3498db');
+    speakText(spokenText);
+    return;
+  }
+
   // ── "voice stop" / "voice start" ──
   if(raw.match(/voice stop|stop voice|stop listening/)){
     toggleDictation();
@@ -1981,13 +2019,28 @@ function processDictation(text, alternatives){
     return;
   }
 
-  // Find jersey number
+  // Find jersey number — try numeric token first, then player name match
   let jersey = null;
   for(const tok of tokens){
     if(/^[0-9]{1,2}$/.test(tok)){ jersey = tok; break; }
   }
   if(!jersey){
-    showDictationResult('❓ No number heard — say "7 ball" or "first batter is number 7"', '#f5a623');
+    // Try to match a player name in the raw phrase
+    const teamPlayers = state.teams[activeTeam];
+    let bestMatch = null, bestLen = 0;
+    for(let pi = 0; pi < PLAYERS; pi++){
+      const pname = teamPlayers[pi].name;
+      if(!pname) continue;
+      const pnameLower = pname.toLowerCase();
+      if(raw.indexOf(pnameLower) !== -1 && pnameLower.length > bestLen){
+        bestMatch = teamPlayers[pi].jersey;
+        bestLen = pnameLower.length;
+      }
+    }
+    if(bestMatch){ jersey = bestMatch; }
+  }
+  if(!jersey){
+    showDictationResult('❓ No player heard — say "7 ball" or "Zeke strike"', '#f5a623');
     return;
   }
 
@@ -2472,16 +2525,7 @@ function speakNextBatter(){
   const display = '#'+nb.jersey+(nb.name?' ('+nb.name+')':'')+' slot '+(nb.slot+1);
   showDictationResult('🏏 ' + teamLabel + ' up: '+display, '#f5a623');
   // Called directly from tap — guaranteed user gesture on iOS
-  if(!window.speechSynthesis) return;
-  window.speechSynthesis.cancel();
-  const utt = new SpeechSynthesisUtterance(spokenText);
-  utt.rate = 0.92;
-  utt.pitch = 1.0;
-  utt.volume = 1.0;
-  const voices = window.speechSynthesis.getVoices();
-  const local = voices.find(function(v){ return v.localService && v.lang.startsWith('en'); });
-  if(local) utt.voice = local;
-  window.speechSynthesis.speak(utt);
+  speakText(spokenText);
 }
 
 
@@ -2541,6 +2585,25 @@ requestWakeLock();
 
 function toTitleCase(str){
   return str.replace(/\b\w/g, function(c){ return c.toUpperCase(); });
+}
+
+
+function speakText(text){
+  if(!window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+  try{ if(recognition) recognition.stop(); }catch(e){}
+  const utt = new SpeechSynthesisUtterance(text);
+  utt.rate = 0.92; utt.pitch = 1.0; utt.volume = 1.0;
+  const voices = window.speechSynthesis.getVoices();
+  const local = voices.find(function(v){ return v.localService && v.lang.startsWith('en'); });
+  if(local) utt.voice = local;
+  utt.onend = function(){
+    setTimeout(function(){ try{ if(dictationActive && recognition) recognition.start(); }catch(e){} }, 500);
+  };
+  utt.onerror = function(){
+    try{ if(dictationActive && recognition) recognition.start(); }catch(e){}
+  };
+  setTimeout(function(){ window.speechSynthesis.speak(utt); }, 100);
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────
