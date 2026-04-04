@@ -532,6 +532,20 @@ header h1{font-size:20px;font-weight:700;color:#f5a623;}
 </div>
 
 <!-- Dictation Toast -->
+<!-- Listening pill - tiny indicator while mic is active -->
+<div id="dictation-pill" style="
+  display:none;position:fixed;top:12px;right:12px;
+  background:#1c1c1e;border:1.5px solid #48484a;border-radius:99px;
+  padding:5px 10px;z-index:9999;
+  box-shadow:0 2px 8px rgba(0,0,0,0.5);
+  display:none;align-items:center;gap:5px;font-size:12px;color:#f2f2f7;
+" id="dictation-pill">
+  <span style="color:#e74c3c;font-size:10px;">●</span>
+  <span>🎙️</span>
+  <span id="pill-transcript" style="max-width:80px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-size:11px;color:#8e8e93;"></span>
+</div>
+
+<!-- Result toast - shown briefly on command result -->
 <div id="dictation-toast" style="
   display:none;position:fixed;top:16px;left:50%;transform:translateX(-50%);
   background:#1c1c1e;border:1.5px solid #48484a;border-radius:14px;
@@ -1462,16 +1476,19 @@ function handleSwapClick(team,playerIdx,jerseyEl){
       document.getElementById('swapHint'+team).textContent='Tap a jersey # to select the FIRST player.';
       return;
     }
-    // Deep swap all player data
-    const temp=JSON.parse(JSON.stringify(state.teams[team][a]));
-    state.teams[team][a]=JSON.parse(JSON.stringify(state.teams[team][b]));
-    state.teams[team][b]=temp;
+    // Swap batting order slots (a and b are visual row indices = battingOrder slots)
+    const tmpJersey = state.battingOrder[team][a];
+    state.battingOrder[team][a] = state.battingOrder[team][b];
+    state.battingOrder[team][b] = tmpJersey;
+    // Also update nextBatterSlot if it was pointing at one of the swapped slots
+    if(state.nextBatterSlot[team]===a) state.nextBatterSlot[team]=b;
+    else if(state.nextBatterSlot[team]===b) state.nextBatterSlot[team]=a;
     save();
     // Exit swap mode and rebuild
     swapMode=false; swapTeam=-1; swapFirst=-1;
     document.getElementById('swapBtn'+team).classList.remove('active');
     document.getElementById('swapCancelBtn'+team).classList.remove('visible');
-    buildScoresheet(team);
+    buildScoresheet(team); buildLineupCards(); buildBatterPane(team);
     // Show confirmation
     const hint=document.getElementById('swapHint'+team);
     hint.classList.add('visible');
@@ -1671,8 +1688,8 @@ function startDictation(){
   if(!recognition && !initDictation()) return;
   dictationActive = true;
   requestWakeLock();
-  document.getElementById('dictation-toast').style.display = 'block';
-  document.getElementById('dictation-status').textContent = '🎙️ Listening...';
+  document.getElementById('dictation-toast').style.display = 'none';
+  document.getElementById('dictation-pill').style.display = 'flex';
   document.getElementById('dictation-transcript').textContent = '';
   document.getElementById('dictation-result').textContent = '';
   document.getElementById('nav-mic').classList.add('recording');
@@ -1687,20 +1704,32 @@ function stopDictation(){
   document.getElementById('nav-mic').classList.remove('recording');
   document.getElementById('mic-icon').textContent = '🎙️';
   document.getElementById('mic-label').textContent = 'Voice';
-  document.getElementById('dictation-status').textContent = '✅ Stopped';
-  setTimeout(()=>{
-    document.getElementById('dictation-toast').style.display='none';
-  }, 1500);
+  document.getElementById('dictation-pill').style.display = 'none';
+  document.getElementById('dictation-toast').style.display = 'none';
 }
 
-function showDictationResult(msg, color='#2ecc71'){
+var _toastTimer = null;
+function showDictationResult(msg, color){
+  color = color || '#2ecc71';
   const el = document.getElementById('dictation-result');
+  const toast = document.getElementById('dictation-toast');
+  const pill = document.getElementById('dictation-pill');
   el.style.color = color;
   el.textContent = msg;
-  // Flash
-  el.style.opacity='1';
-  setTimeout(()=>{ el.style.opacity='0.6'; }, 600);
-  setTimeout(()=>{ el.style.opacity='1'; }, 1000);
+  toast.style.display = 'block';
+  toast.style.opacity = '1';
+  if(_toastTimer) clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(function(){
+    toast.style.transition = 'opacity 0.4s';
+    toast.style.opacity = '0';
+    setTimeout(function(){
+      toast.style.display = 'none';
+      toast.style.transition = '';
+      toast.style.opacity = '1';
+      el.textContent = '';
+      if(dictationActive) pill.style.display = 'flex';
+    }, 400);
+  }, 3000);
 }
 
 function processDictation(text, alternatives){
@@ -1743,16 +1772,16 @@ function processDictation(text, alternatives){
     const ord = ordKeys[oi];
     // Build regex: "[ord] batter is [optional: number/#] [jersey]"
     if(raw.indexOf(ord) !== -1){
-      const re = new RegExp(ord + '\\s+batter\\s+is\\s+(?:number\\s+|#\\s*)?([0-9]{1,2})');
+      const re = new RegExp(ord + '\\s+batter\\s+is\\s+(?:number\\s+|#\\s*)?([0-9]{1,2})(?:\\s+([a-z][a-z\\s]*))?');
       const m = raw.match(re);
-      if(m){ batterIsMatch = { slot: parseInt(ORD2N[ord]) - 1, jersey: m[1] }; break; }
+      if(m){ batterIsMatch = { slot: parseInt(ORD2N[ord]) - 1, jersey: m[1], playerName: m[2] ? m[2].trim() : '' }; break; }
     }
   }
   // Try numeric slot: "batter 3 is number 12" or "3 batter is number 12"
   if(!batterIsMatch){
-    const numSlotRe = raw.match(/(?:batter\s+)?([0-9]{1,2})\s+(?:batter\s+)?is\s+(?:number\s+|#\s*)?([0-9]{1,2})/);
+    const numSlotRe = raw.match(/(?:batter\s+)?([0-9]{1,2})\s+(?:batter\s+)?is\s+(?:number\s+|#\s*)?([0-9]{1,2})(?:\s+([a-z][a-z\s]*))?/);
     if(numSlotRe && numSlotRe[1] !== numSlotRe[2]){
-      batterIsMatch = { slot: parseInt(numSlotRe[1]) - 1, jersey: numSlotRe[2] };
+      batterIsMatch = { slot: parseInt(numSlotRe[1]) - 1, jersey: numSlotRe[2], playerName: numSlotRe[3] ? numSlotRe[3].trim() : '' };
     }
   }
 
@@ -1769,18 +1798,22 @@ function processDictation(text, alternatives){
         state.battingOrder[team][existingSlot] = displaced;
       }
       state.battingOrder[team][slot] = jersey;
-      // Update Ptr# for new player in this slot
+      // Update Ptr# and name for new player in this slot
       const pIdx = state.teams[team].findIndex(function(p){ return p.jersey === jersey; });
-      if(pIdx !== -1 && state.activePitcher[team]){
-        for(let i = activeInning[team]; i < INNINGS; i++)
-          state.teams[team][pIdx].innings[i].pitcherJersey = state.activePitcher[team];
+      if(pIdx !== -1){
+        if(batterIsMatch.playerName) state.teams[team][pIdx].name = toTitleCase(batterIsMatch.playerName);
+        if(state.activePitcher[team]){
+          for(let i = activeInning[team]; i < INNINGS; i++)
+            state.teams[team][pIdx].innings[i].pitcherJersey = state.activePitcher[team];
+        }
       }
       save(); buildLineupCards();
       buildScoresheet(team); syncAllRunButtons(); updateTotalsBar(team);
       buildBatterPane(team);
       switchPage('batters'); switchBatterTeam(team);
       const swapMsg = (existingSlot !== -1 && existingSlot !== slot) ? ' (swapped with slot '+(existingSlot+1)+')' : '';
-      showDictationResult('✅ Slot '+(slot+1)+' → #'+jersey+swapMsg+(state.activePitcher[team]?' | Ptr#'+state.activePitcher[team]:''));
+      const nameMsg = batterIsMatch.playerName ? ' | '+toTitleCase(batterIsMatch.playerName) : '';
+      showDictationResult('✅ Slot '+(slot+1)+' → #'+jersey+nameMsg+swapMsg+(state.activePitcher[team]?' | Ptr#'+state.activePitcher[team]:''));
       return;
     }
   }
@@ -1827,6 +1860,57 @@ function processDictation(text, alternatives){
     applyActivePitcher(voiceTeam, pitcherJersey, activeInning[voiceTeam]);
     switchPage('batters'); switchBatterTeam(voiceTeam);
     showDictationResult('✅ Pitcher #'+pitcherJersey+' set for '+(voiceTeam===0?'Home':'Away')+' batters from Inn.'+(activeInning[voiceTeam]+1));
+    return;
+  }
+
+
+  // ── "substitute" voice command ──────────────────────────────────────────
+  // Patterns: "substitute player 1 for player 2" | "substitute 7 for 12" | "substitute Zeke for John"
+  const subMatch = raw.match(/substitute(?:\s+player)?\s+(.+?)\s+for(?:\s+player)?\s+(.+?)\s*$/);
+  if(subMatch){
+    const team = voiceTeam;
+    const aRaw = subMatch[1].trim();
+    const bRaw = subMatch[2].trim();
+
+    function findSlotBy(val){
+      // Try slot number (1-based)
+      if(/^[0-9]{1,2}$/.test(val)){
+        const slotNum = parseInt(val) - 1;
+        // Check if it's a jersey match first
+        const jerseySlot = state.battingOrder[team].indexOf(val);
+        if(jerseySlot !== -1) return jerseySlot;
+        if(slotNum >= 0 && slotNum < 9) return slotNum;
+      }
+      // Try jersey number match
+      const jSlot = state.battingOrder[team].indexOf(val);
+      if(jSlot !== -1) return jSlot;
+      // Try player name match (case-insensitive)
+      const nameLower = val.toLowerCase();
+      for(let slot = 0; slot < 9; slot++){
+        const jersey = state.battingOrder[team][slot];
+        const pIdx = state.teams[team].findIndex(function(p){ return p.jersey === jersey; });
+        if(pIdx !== -1 && state.teams[team][pIdx].name.toLowerCase().indexOf(nameLower) !== -1) return slot;
+      }
+      return -1;
+    }
+
+    const slotA = findSlotBy(aRaw);
+    const slotB = findSlotBy(bRaw);
+
+    if(slotA !== -1 && slotB !== -1 && slotA !== slotB){
+      const tmpJ = state.battingOrder[team][slotA];
+      state.battingOrder[team][slotA] = state.battingOrder[team][slotB];
+      state.battingOrder[team][slotB] = tmpJ;
+      if(state.nextBatterSlot[team]===slotA) state.nextBatterSlot[team]=slotB;
+      else if(state.nextBatterSlot[team]===slotB) state.nextBatterSlot[team]=slotA;
+      save();
+      buildScoresheet(team); buildLineupCards(); buildBatterPane(team); syncAllRunButtons();
+      const labelA = '#'+state.battingOrder[team][slotB]+(aRaw.match(/^[0-9]/)? '' : ' '+toTitleCase(aRaw));
+      const labelB = '#'+state.battingOrder[team][slotA]+(bRaw.match(/^[0-9]/)? '' : ' '+toTitleCase(bRaw));
+      showDictationResult('✅ Swapped: '+labelA+' ↔ '+labelB+' (slots '+(slotA+1)+' & '+(slotB+1)+')');
+    } else {
+      showDictationResult('⚠️ Could not find players: "'+aRaw+'" or "'+bRaw+'"', '#e74c3c');
+    }
     return;
   }
 
@@ -2453,6 +2537,11 @@ document.addEventListener('visibilitychange', function(){
 
 // Request on page load
 requestWakeLock();
+
+
+function toTitleCase(str){
+  return str.replace(/\b\w/g, function(c){ return c.toUpperCase(); });
+}
 
 // ── Init ──────────────────────────────────────────────────────────────────
 loadSaved();
