@@ -1805,7 +1805,15 @@ function processDictation(text, alternatives){
   }
 
   // ── "pitcher 11" / "new pitcher 11" → set active pitcher ──
-  const ptMatch = raw.match(/(?:new\s+)?(?:pitcher|picture|pitchur|pitchers|pitching)\s+(?:number\s+|#\s*)?([0-9]{1,2})/);
+  // Pre-process pitcher phrase: replace number words right after pitcher keyword
+  const pitcherNumMap = {'for':'4','fore':'4','one':'1','two':'2','three':'3','four':'4',
+    'five':'5','six':'6','seven':'7','eight':'8','nine':'9','ten':'10',
+    'eleven':'11','twelve':'12','won':'1','too':'2','to':'2','ate':'8'};
+  const pitcherRaw = raw.replace(
+    /(?:new\s+)?(?:pitcher|picture|pitchur|pitchers|pitching)\s+(?:number\s+|#\s*)?([a-z]+)/,
+    function(match, word){ return pitcherNumMap[word] ? match.replace(word, pitcherNumMap[word]) : match; }
+  );
+  const ptMatch = pitcherRaw.match(/(?:new\s+)?(?:pitcher|picture|pitchur|pitchers|pitching)\s+(?:number\s+|#\s*)?([0-9]{1,2})/);
   if(ptMatch){
     const pitcherJersey = ptMatch[1];
     applyActivePitcher(voiceTeam, pitcherJersey, activeInning[voiceTeam]);
@@ -1816,17 +1824,12 @@ function processDictation(text, alternatives){
 
   // ── "who's up" / "current batter" / "next batter" → announce next up ──
   if(raw.match(/who.?s up|current batter|next batter|who is up|whos up/)){
-    const nb0 = getNextBatterInfo(0);
-    const nb1 = getNextBatterInfo(1);
-    const homeName = nb0.name || 'number '+nb0.jersey;
-    const awayName = nb1.name || 'number '+nb1.jersey;
-    const homeSlot = nb0.slot+1;
-    const awaySlot = nb1.slot+1;
-    const spokenText = 'Home team, batting order position '+homeSlot+', '+homeName+'. Away team, batting order position '+awaySlot+', '+awayName+'.';
-    const home = '#'+nb0.jersey+(nb0.name?' ('+nb0.name+')':'')+' slot '+homeSlot;
-    const away = '#'+nb1.jersey+(nb1.name?' ('+nb1.name+')':'')+' slot '+awaySlot;
-    showDictationResult('🏏 Home: '+home+' | Away: '+away, '#f5a623');
-    speak(spokenText);
+    const team = voiceTeam;
+    const nb = getNextBatterInfo(team);
+    const teamLabel = team===0?'Home':'Away';
+    const playerName = nb.name || 'number '+nb.jersey;
+    const display = '#'+nb.jersey+(nb.name?' ('+nb.name+')':'')+' slot '+(nb.slot+1);
+    showDictationResult('🏏 '+teamLabel+' up: '+display, '#f5a623');
     return;
   }
 
@@ -2344,16 +2347,23 @@ function speak(text){
 }
 
 
+function getActiveTeam(){
+  // Determine which team is currently active from the visible tab
+  const ap = document.querySelector('.page.active');
+  if(ap && ap.id === 'page-away') return 1;
+  const bt1 = document.getElementById('batter-tab-1');
+  if(bt1 && bt1.classList.contains('active')) return 1;
+  return 0;
+}
+
 function speakNextBatter(){
-  const nb0 = getNextBatterInfo(0);
-  const nb1 = getNextBatterInfo(1);
-  const homeName = nb0.name || 'number ' + nb0.jersey;
-  const awayName = nb1.name || 'number ' + nb1.jersey;
-  const spokenText = 'Home team, batting order position ' + (nb0.slot+1) + ', ' + homeName +
-    '. Away team, batting order position ' + (nb1.slot+1) + ', ' + awayName + '.';
-  const home = '#'+nb0.jersey+(nb0.name?' ('+nb0.name+')':'')+' slot '+(nb0.slot+1);
-  const away = '#'+nb1.jersey+(nb1.name?' ('+nb1.name+')':'')+' slot '+(nb1.slot+1);
-  showDictationResult('🏏 Home: '+home+' | Away: '+away, '#f5a623');
+  const team = getActiveTeam();
+  const nb = getNextBatterInfo(team);
+  const teamLabel = team === 0 ? 'Home' : 'Away';
+  const playerName = nb.name || 'number ' + nb.jersey;
+  const spokenText = teamLabel + ' team, batting order position ' + (nb.slot+1) + ', ' + playerName + '.';
+  const display = '#'+nb.jersey+(nb.name?' ('+nb.name+')':'')+' slot '+(nb.slot+1);
+  showDictationResult('🏏 ' + teamLabel + ' up: '+display, '#f5a623');
   // Called directly from tap — guaranteed user gesture on iOS
   if(!window.speechSynthesis) return;
   window.speechSynthesis.cancel();
