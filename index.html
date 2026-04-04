@@ -392,6 +392,20 @@ header h1{font-size:20px;font-weight:700;color:#f5a623;}
 .batter-avg-row{display:flex;align-items:center;justify-content:space-between;padding:6px 12px;background:#0a0a0f;border-top:1px solid #3a3a3c;}
 .batter-avg-label{font-size:10px;color:#8e8e93;text-transform:uppercase;letter-spacing:1px;}
 .batter-avg-val{font-size:18px;font-weight:900;}
+
+/* ── Next Batter Highlight ─────────────────────────────── */
+.next-up-row {
+  background: rgba(245,166,35,0.08) !important;
+  border-left: 3px solid #f5a623 !important;
+}
+.next-up-input {
+  color: #f5a623 !important;
+  font-weight: 700 !important;
+}
+@keyframes upPulse {
+  from { opacity: 0.5; transform: translateX(0px); }
+  to   { opacity: 1.0; transform: translateX(2px); }
+}
 </style>
 </head>
 <body>
@@ -613,7 +627,7 @@ function isHit(p){return p==='single'||p==='double'||p==='triple'||p==='homerun'
 
 // ── State ─────────────────────────────────────────────────────────────────
 function freshPlayer(num){
-  return{jersey:num!==undefined?String(num):'',name:'',pos:'',innings:Array.from({length:INNINGS},()=>({play:'',run:false,balls:0,strikes:0,pitcherJersey:''}))};
+  return{jersey:num!==undefined?String(num):'',name:'',pos:'',innings:Array.from({length:INNINGS},()=>({play:'',run:false,balls:0,strikes:0,pitcherJersey:'',baseOut:false}))};
 }
 function freshPitcher(){
   return{jersey:'',name:'',innings:Array.from({length:INNINGS},()=>({balls:0,strikes:0}))};
@@ -632,7 +646,8 @@ const state={
     Array.from({length:PLAYERS},(_,i)=>String(i+1))
   ],
   activePitcher:['',''],
-  activePitcherFromInning:[0,0]
+  activePitcherFromInning:[0,0],
+  nextBatterSlot:[0,0]
 };
 
 // ── Persist ───────────────────────────────────────────────────────────────
@@ -666,6 +681,7 @@ function loadSaved(){
               state.teams[t][p].innings[i].balls=s.teams[t][p].innings[i].balls||0;
               state.teams[t][p].innings[i].strikes=s.teams[t][p].innings[i].strikes||0;
               state.teams[t][p].innings[i].pitcherJersey=s.teams[t][p].innings[i].pitcherJersey||'';
+              state.teams[t][p].innings[i].baseOut=s.teams[t][p].innings[i].baseOut||false;
             }
           }
         }
@@ -693,6 +709,7 @@ function loadSaved(){
     }
     if(s.activePitcher) state.activePitcher=s.activePitcher.map(j=>String(j||''));
     if(s.activePitcherFromInning) state.activePitcherFromInning=[...s.activePitcherFromInning];
+    if(s.nextBatterSlot) state.nextBatterSlot=[...s.nextBatterSlot];
   }catch(e){}
 }
 ['gameDate','gameLocation','teamName0','teamName1'].forEach(id=>{
@@ -721,12 +738,18 @@ function buildInningBtns(team){
     const btn=document.createElement('button');
     btn.className='inn-btn'+(i===activeInning[team]?' active':'');
     btn.textContent=i+1;
-    btn.addEventListener('click',()=>{
-      activeInning[team]=i;
-      document.querySelectorAll('#'+id+' .inn-btn').forEach((b,j)=>b.classList.toggle('active',j===i));
+    btn.addEventListener('click',(function(innNum){return function(){
+      const prev = activeInning[team];
+      activeInning[team] = innNum;
+      document.querySelectorAll('#'+id+' .inn-btn').forEach(function(b,j){b.classList.toggle('active',j===innNum);});
+      if(innNum > prev) calcNextBatterSlot(team, prev);
       buildScoresheet(team);
       syncAllRunButtons();
-    });
+      const nb = getNextBatterInfo(team);
+      const teamLabel = team===0?'Home':'Away';
+      const nameStr = nb.name ? ' '+nb.name : '';
+      showDictationResult('Inn.'+(innNum+1)+' | '+teamLabel+' up: #'+nb.jersey+nameStr+' (slot '+(nb.slot+1)+')', '#3498db');
+    };})(i));
     wrap.appendChild(btn);
   }
 }
@@ -836,16 +859,57 @@ function buildScoresheet(team){
     let p = state.teams[team].findIndex(function(pl){return pl.jersey===orderJersey;});
     if(p===-1) p=slot; // fallback to slot index if jersey not found
     const row=document.createElement('div');
-    row.className='row-grid player-row';
+    const isNextUpRow = (slot === state.nextBatterSlot[team] && slot < 9 && activeInning[team] > 0);
+    row.className='row-grid player-row'+(isNextUpRow?' next-up-row':'');
     const numD=document.createElement('input');
     numD.className='jersey-input';
     numD.type='text';numD.maxLength=2;numD.placeholder='#';
     numD.value=state.teams[team][p].jersey||'';
-    numD.addEventListener('input',(function(pi){return function(e){state.teams[team][pi].jersey=e.target.value;save();};})(p));
+    numD.addEventListener('input',(function(pi){return function(e){
+      const newJersey = e.target.value.trim();
+      if(newJersey !== ''){
+        // If another player already has this jersey, clear theirs (swap in battingOrder too)
+        for(let qi=0; qi<PLAYERS; qi++){
+          if(qi !== pi && state.teams[team][qi].jersey === newJersey){
+            state.teams[team][qi].jersey = '';
+            // Update battingOrder: replace newJersey slot with displaced jersey
+            const newSlot = state.battingOrder[team].indexOf(newJersey);
+            const oldSlot = state.battingOrder[team].indexOf(state.teams[team][pi].jersey||'');
+            if(newSlot !== -1 && oldSlot !== -1 && newSlot !== oldSlot){
+              state.battingOrder[team][newSlot] = state.teams[team][pi].jersey||'';
+            } else if(newSlot !== -1){
+              state.battingOrder[team][newSlot] = '';
+            }
+            break;
+          }
+        }
+      }
+      state.teams[team][pi].jersey = newJersey;
+      // Update battingOrder slot for this player
+      const mySlot = state.battingOrder[team].indexOf(newJersey);
+      if(mySlot === -1){
+        // Not in order yet - find slot by old jersey or assign to first empty
+        const oldSlot2 = state.battingOrder[team].indexOf(state.teams[team][pi].jersey||'__NONE__');
+        if(oldSlot2 !== -1) state.battingOrder[team][oldSlot2] = newJersey;
+      }
+      save(); buildLineupCards(); buildScoresheet(team);
+    };})(p));
     const nameIn=document.createElement('input');
-    nameIn.className='player-name-input';nameIn.placeholder='Player '+(slot+1);
+    const isNextUp = (slot === state.nextBatterSlot[team] && slot < 9 && activeInning[team] > 0);
+    nameIn.className='player-name-input'+(isNextUp?' next-up-input':'');
+    nameIn.placeholder='Player '+(slot+1);
     nameIn.value=state.teams[team][p].name;
     nameIn.addEventListener('input',(function(pi){return function(e){state.teams[team][pi].name=e.target.value;save();};})(p));
+    // ▶ UP badge wrapper
+    const nameWrap=document.createElement('div');
+    nameWrap.style.cssText='display:flex;align-items:center;gap:3px;overflow:hidden;';
+    if(isNextUp){
+      const upBadge=document.createElement('span');
+      upBadge.textContent='▶';
+      upBadge.style.cssText='color:#f5a623;font-size:10px;font-weight:900;flex-shrink:0;animation:upPulse 1s ease-in-out infinite alternate;';
+      nameWrap.appendChild(upBadge);
+    }
+    nameWrap.appendChild(nameIn);
     const posIn=document.createElement('input');
     posIn.className='pos-input';posIn.placeholder='POS';posIn.maxLength=3;
     posIn.value=state.teams[team][p].pos;
@@ -853,9 +917,44 @@ function buildScoresheet(team){
     const playCell=document.createElement('div');
     playCell.className='play-cell';
     const play=state.teams[team][p].innings[inn].play;
-    if(play){playCell.classList.add(play);playCell.textContent=playLabels[play];}
-    else playCell.textContent='—';
-    playCell.addEventListener('click',(function(pi){return function(){openModal(team,pi);};})(p));
+    const baseOut=state.teams[team][p].innings[inn].baseOut||false;
+    const isReachPlay = play==='single'||play==='double'||play==='triple'||play==='walk'||play==='homerun'||play==='error';
+    if(play){
+      playCell.classList.add(play);
+      playCell.innerHTML = baseOut && isReachPlay
+        ? '<span style="font-size:10px;font-weight:900;">'+playLabels[play]+'</span><span style="font-size:9px;color:#e74c3c;font-weight:900;margin-left:2px;">✕</span>'
+        : playLabels[play];
+    } else {
+      playCell.textContent='—';
+    }
+    // Tap-to-cycle: no play→stays (open modal); has reach play→cycle hit/hit+out/clear; has plate out→toggle out/clear
+    playCell.addEventListener('click',(function(pi){return function(){
+      const curPlay = state.teams[team][pi].innings[inn].play;
+      const curBaseOut = state.teams[team][pi].innings[inn].baseOut||false;
+      const isReach = curPlay==='single'||curPlay==='double'||curPlay==='triple'||curPlay==='walk'||curPlay==='homerun'||curPlay==='error';
+      const isPlateOut = curPlay==='out'||curPlay==='strikeout';
+      if(!curPlay){
+        // No play yet — open modal to select
+        openModal(team,pi);
+      } else if(isReach && !curBaseOut){
+        // Reach play, not out yet → mark out on bases
+        state.teams[team][pi].innings[inn].baseOut = true;
+        save(); buildScoresheet(team); syncAllRunButtons(); checkThreeOuts(team,inn);
+      } else if(isReach && curBaseOut){
+        // Reach play + base out → clear everything
+        state.teams[team][pi].innings[inn].play = '';
+        state.teams[team][pi].innings[inn].baseOut = false;
+        state.teams[team][pi].innings[inn].run = false;
+        save(); buildScoresheet(team); syncAllRunButtons(); updateScoreBadges();
+      } else if(isPlateOut){
+        // Plate out → clear
+        state.teams[team][pi].innings[inn].play = '';
+        state.teams[team][pi].innings[inn].baseOut = false;
+        save(); buildScoresheet(team); syncAllRunButtons();
+      } else {
+        openModal(team,pi);
+      }
+    };})(p));
     const runBtn=document.createElement('div');
     runBtn.className='run-toggle'+(state.teams[team][p].innings[inn].run?' scored':'');
     runBtn.textContent='R';
@@ -874,7 +973,7 @@ function buildScoresheet(team){
     // Strikes counter (max 3)
     const strikesWrap=makeBatterCounter(team,p,inn,'strikes',3,'#e74c3c',false);
 
-    row.appendChild(numD);row.appendChild(nameIn);row.appendChild(posIn);
+    row.appendChild(numD);row.appendChild(nameWrap);row.appendChild(posIn);
     // Pitcher jersey input for this at-bat
     const pjWrap=document.createElement('div');
     pjWrap.style.cssText='display:flex;align-items:center;justify-content:center;';
@@ -1644,20 +1743,26 @@ function processDictation(text, alternatives){
     const jersey = batterIsMatch.jersey;
     if(slot >= 0 && slot < PLAYERS){
       const team = voiceTeam;
+      // Check if jersey already exists in another slot → swap
+      const existingSlot = state.battingOrder[team].indexOf(jersey);
+      if(existingSlot !== -1 && existingSlot !== slot){
+        // Swap: move displaced jersey to the slot being vacated
+        const displaced = state.battingOrder[team][slot];
+        state.battingOrder[team][existingSlot] = displaced;
+      }
       state.battingOrder[team][slot] = jersey;
-      // Find player and update Ptr# for current+future innings
+      // Update Ptr# for new player in this slot
       const pIdx = state.teams[team].findIndex(function(p){ return p.jersey === jersey; });
       if(pIdx !== -1 && state.activePitcher[team]){
         for(let i = activeInning[team]; i < INNINGS; i++)
           state.teams[team][pIdx].innings[i].pitcherJersey = state.activePitcher[team];
       }
       save(); buildLineupCards();
-      // Update both batters tab and home/away scoresheet
       buildScoresheet(team); syncAllRunButtons(); updateTotalsBar(team);
       buildBatterPane(team);
-      // Navigate to batters tab and show correct team
       switchPage('batters'); switchBatterTeam(team);
-      showDictationResult('✅ Slot '+(slot+1)+' → #'+jersey+(state.activePitcher[team]?' | Ptr#'+state.activePitcher[team]:''));
+      const swapMsg = (existingSlot !== -1 && existingSlot !== slot) ? ' (swapped with slot '+(existingSlot+1)+')' : '';
+      showDictationResult('✅ Slot '+(slot+1)+' → #'+jersey+swapMsg+(state.activePitcher[team]?' | Ptr#'+state.activePitcher[team]:''));
       return;
     }
   }
@@ -1668,6 +1773,11 @@ function processDictation(text, alternatives){
     const slot = parseInt(chgMatch[1]) - 1;
     const jersey = chgMatch[2];
     if(slot >= 0 && slot < PLAYERS){
+      const existingSlot = state.battingOrder[voiceTeam].indexOf(jersey);
+      if(existingSlot !== -1 && existingSlot !== slot){
+        const displaced = state.battingOrder[voiceTeam][slot];
+        state.battingOrder[voiceTeam][existingSlot] = displaced;
+      }
       state.battingOrder[voiceTeam][slot] = jersey;
       const pIdx = state.teams[voiceTeam].findIndex(function(p){ return p.jersey === jersey; });
       if(pIdx !== -1 && state.activePitcher[voiceTeam]){
@@ -1678,7 +1788,8 @@ function processDictation(text, alternatives){
       buildScoresheet(voiceTeam); syncAllRunButtons(); updateTotalsBar(voiceTeam);
       buildBatterPane(voiceTeam);
       switchPage('batters'); switchBatterTeam(voiceTeam);
-      showDictationResult('✅ Slot '+(slot+1)+' → #'+jersey);
+      const swapMsg2 = (existingSlot !== -1 && existingSlot !== slot) ? ' (swapped with slot '+(existingSlot+1)+')' : '';
+      showDictationResult('✅ Slot '+(slot+1)+' → #'+jersey+swapMsg2);
       return;
     }
   }
@@ -1693,6 +1804,16 @@ function processDictation(text, alternatives){
     return;
   }
 
+  // ── "who's up" / "current batter" / "next batter" → announce next up ──
+  if(raw.match(/who.?s up|current batter|next batter|who is up|whos up/)){
+    const nb0 = getNextBatterInfo(0);
+    const nb1 = getNextBatterInfo(1);
+    const home = '#'+nb0.jersey+(nb0.name?' ('+nb0.name+')':'')+' slot '+(nb0.slot+1);
+    const away = '#'+nb1.jersey+(nb1.name?' ('+nb1.name+')':'')+' slot '+(nb1.slot+1);
+    showDictationResult('🏏 Home: '+home+' | Away: '+away, '#f5a623');
+    return;
+  }
+
   // ── Strip filler words for standard play commands ──
   let t = raw;
   const FILLERS = new Set(['player','batter','number','jersey','the','a','an','no','#']);
@@ -1704,10 +1825,18 @@ function processDictation(text, alternatives){
   if(innIdx !== -1 && tokens[innIdx+1] && /^[0-9]+$/.test(tokens[innIdx+1])){
     const n = parseInt(tokens[innIdx+1]) - 1;
     if(n >= 0 && n < INNINGS){
+      const prevInning0 = activeInning[0];
+      const prevInning1 = activeInning[1];
       activeInning[0] = n; activeInning[1] = n;
+      if(n > prevInning0) calcNextBatterSlot(0, prevInning0);
+      if(n > prevInning1) calcNextBatterSlot(1, prevInning1);
       buildInningBtns(0); buildInningBtns(1);
       buildScoresheet(0); buildScoresheet(1);
-      showDictationResult('✅ Inning ' + (n+1));
+      const nb0 = getNextBatterInfo(0);
+      const nb1 = getNextBatterInfo(1);
+      const homeStr = '#'+nb0.jersey+(nb0.name?' '+nb0.name:'');
+      const awayStr = '#'+nb1.jersey+(nb1.name?' '+nb1.name:'');
+      showDictationResult('✅ Inning '+(n+1)+' | Home up: '+homeStr+' | Away up: '+awayStr);
       save(); return;
     }
   }
@@ -1831,12 +1960,23 @@ function processDictation(text, alternatives){
     checkFiveRuns(activeTeam, inn);
     showDictationResult('✅ #' + jersey + ' scored! (inn:' + (inn+1) + ')');
   } else {
-    pl.innings[inn].play = (pl.innings[inn].play === cmd) ? '' : cmd;
-    if(cmd==='homerun') pl.innings[inn].run = true;
-    buildScoresheet(activeTeam); updateTotalsBar(activeTeam); syncAllRunButtons(); updateScoreBadges();
-    showDictationResult('✅ #' + jersey + ' → ' + cmd + (cmd==='homerun'?' + Run!':''));
-    if(cmd==='out'||cmd==='strikeout') checkThreeOuts(activeTeam, inn);
-    if(cmd==='homerun') checkFiveRuns(activeTeam, inn);
+    const curPlay = pl.innings[inn].play;
+    const isReachPlay2 = curPlay==='single'||curPlay==='double'||curPlay==='triple'||curPlay==='walk'||curPlay==='homerun'||curPlay==='error';
+    if((cmd==='out'||cmd==='strikeout') && isReachPlay2){
+      // Batter already reached base — mark as out on bases, keep the hit
+      pl.innings[inn].baseOut = true;
+      buildScoresheet(activeTeam); updateTotalsBar(activeTeam); syncAllRunButtons(); updateScoreBadges();
+      showDictationResult('✅ #' + jersey + ' out on bases (kept ' + curPlay + ')');
+      checkThreeOuts(activeTeam, inn);
+    } else {
+      pl.innings[inn].play = (pl.innings[inn].play === cmd) ? '' : cmd;
+      if(cmd==='homerun') pl.innings[inn].run = true;
+      if(cmd!=='out' && cmd!=='strikeout') pl.innings[inn].baseOut = false;
+      buildScoresheet(activeTeam); updateTotalsBar(activeTeam); syncAllRunButtons(); updateScoreBadges();
+      showDictationResult('✅ #' + jersey + ' → ' + cmd + (cmd==='homerun'?' + Run!':''));
+      if(cmd==='out'||cmd==='strikeout') checkThreeOuts(activeTeam, inn);
+      if(cmd==='homerun') checkFiveRuns(activeTeam, inn);
+    }
   }
   save();
 }
@@ -1872,7 +2012,8 @@ function playThreeOutsChime(){
 function checkThreeOuts(team, inning){
   const outs = state.teams[team].reduce((n, pl) => {
     const p = pl.innings[inning].play;
-    return n + (p === 'out' || p === 'strikeout' ? 1 : 0);
+    const bo = pl.innings[inning].baseOut||false;
+    return n + (p === 'out' || p === 'strikeout' || bo ? 1 : 0);
   }, 0);
   if(outs === 3) playThreeOutsChime();
 }
@@ -2085,6 +2226,44 @@ function buildLineupCard(team){
 function buildLineupCards(){
   buildLineupCard(0);
   buildLineupCard(1);
+}
+
+
+// ── Next Batter Tracking ───────────────────────────────────────────────────
+
+function calcNextBatterSlot(team, fromInning){
+  // Slots 0-8 only (9-man lineup; slots 9-11 are bench)
+  const LINEUP = 9;
+  if(fromInning < 0){
+    state.nextBatterSlot[team] = 0;
+    return;
+  }
+  // Find the last slot (0-8) that had a play in fromInning
+  let lastPlayed = -1;
+  for(let slot = 0; slot < LINEUP; slot++){
+    const jersey = state.battingOrder[team][slot];
+    const pIdx = state.teams[team].findIndex(function(p){ return p.jersey === jersey; });
+    if(pIdx === -1) continue;
+    const inn = state.teams[team][pIdx].innings[fromInning];
+    if(inn.play !== '' || inn.baseOut){
+      lastPlayed = slot;
+    }
+  }
+  if(lastPlayed === -1){
+    // No plays in that inning — keep current position
+    return;
+  }
+  // Next slot wraps within 0-8
+  state.nextBatterSlot[team] = (lastPlayed + 1) % LINEUP;
+  save();
+}
+
+function getNextBatterInfo(team){
+  const slot = state.nextBatterSlot[team];
+  const jersey = state.battingOrder[team][slot];
+  const pIdx = state.teams[team].findIndex(function(p){ return p.jersey === jersey; });
+  const name = pIdx !== -1 && state.teams[team][pIdx].name ? state.teams[team][pIdx].name : '';
+  return { slot: slot, jersey: jersey, name: name };
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────
