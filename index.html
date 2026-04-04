@@ -1736,6 +1736,7 @@ function processDictation(text, alternatives){
   document.getElementById('dictation-transcript').textContent = '"' + text + '"';
 
   let raw = text.toLowerCase().trim();
+  const rawOriginal = raw; // preserve before W2N substitution
 
   // Word-to-digit
   const W2N = {one:'1',two:'2',three:'3',four:'4',five:'5',six:'6',seven:'7',
@@ -1866,7 +1867,7 @@ function processDictation(text, alternatives){
 
   // ── "substitute" voice command ──────────────────────────────────────────
   // Patterns: "substitute player 1 for player 2" | "substitute 7 for 12" | "substitute Zeke for John"
-  const subMatch = raw.match(/substitute(?:\s+player)?\s+(.+?)\s+for(?:\s+player)?\s+(.+?)\s*$/);
+  const subMatch = rawOriginal.match(/substitute(?:\s+player)?\s+(.+?)\s+for(?:\s+player)?\s+(.+?)\s*$/);
   if(subMatch){
     const team = voiceTeam;
     const aRaw = subMatch[1].trim();
@@ -1934,8 +1935,26 @@ function processDictation(text, alternatives){
     return;
   }
 
+  // ── "what is the score" / "current score" ───────────────────────────────
+  if(raw.match(/what(?:'s| is) the score|current score|the score|what(?:'s| is) the game/)){
+    let homeRuns = 0, awayRuns = 0;
+    state.teams[0].forEach(function(pl){ pl.innings.forEach(function(i){ if(i.run) homeRuns++; }); });
+    state.teams[1].forEach(function(pl){ pl.innings.forEach(function(i){ if(i.run) awayRuns++; }); });
+    const homeName = getTeamName(0);
+    const awayName = getTeamName(1);
+    const inn = activeInning[voiceTeam] + 1;
+    const halfLabel = voiceTeam === 0 ? 'bottom' : 'top';
+    const spokenText = homeName + ' ' + homeRuns + ', ' + awayName + ' ' + awayRuns +
+      ', ' + halfLabel + ' of the ' + inn + '.';
+    const display = homeName + ' ' + homeRuns + ' — ' + awayName + ' ' + awayRuns +
+      '  |  ' + halfLabel.charAt(0).toUpperCase()+halfLabel.slice(1) + ' ' + inn;
+    showDictationResult('🏆 ' + display, '#f5a623');
+    speakText(spokenText);
+    return;
+  }
+
   // ── "how many outs" ──────────────────────────────────────────────────────
-  if(raw.match(/how many outs|outs? count|count outs?|outs? in (?:the )?inning/)){
+  if(raw.match(/how many outs?|out count|outs? count|count outs?|outs? in (?:the )?inning/)){
     const team = voiceTeam;
     const inn = activeInning[team];
     const outs = state.teams[team].reduce(function(n, pl){
@@ -2025,14 +2044,14 @@ function processDictation(text, alternatives){
     if(/^[0-9]{1,2}$/.test(tok)){ jersey = tok; break; }
   }
   if(!jersey){
-    // Try to match a player name in the raw phrase
+    // Try to match a player name using rawOriginal (before W2N mangles name words)
     const teamPlayers = state.teams[activeTeam];
     let bestMatch = null, bestLen = 0;
     for(let pi = 0; pi < PLAYERS; pi++){
       const pname = teamPlayers[pi].name;
       if(!pname) continue;
       const pnameLower = pname.toLowerCase();
-      if(raw.indexOf(pnameLower) !== -1 && pnameLower.length > bestLen){
+      if(rawOriginal.indexOf(pnameLower) !== -1 && pnameLower.length > bestLen){
         bestMatch = teamPlayers[pi].jersey;
         bestLen = pnameLower.length;
       }
