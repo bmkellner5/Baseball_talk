@@ -1499,7 +1499,11 @@ function handleSwapClick(team,playerIdx,jerseyEl){
       document.getElementById('swapHint'+team).textContent='Tap a jersey # to select the FIRST player.';
       return;
     }
-    // Swap batting order slots (a and b are visual row indices = battingOrder slots)
+    // Swap entire player objects between slots (slot IS array index in p=slot model)
+    const tmpPlayer = state.teams[team][a];
+    state.teams[team][a] = state.teams[team][b];
+    state.teams[team][b] = tmpPlayer;
+    // Keep battingOrder labels in sync
     const tmpJersey = state.battingOrder[team][a];
     state.battingOrder[team][a] = state.battingOrder[team][b];
     state.battingOrder[team][b] = tmpJersey;
@@ -1823,7 +1827,7 @@ function processDictation(text, alternatives){
   // Try numeric slot: "batter 3 is number 12" or "3 batter is number 12"
   if(!batterIsMatch){
     const numSlotRe = raw.match(/(?:batter\s+)?([0-9]{1,2})\s+(?:batter\s+)?is\s+(?:number\s+|#\s*)?([0-9]{1,2})(?:\s+([a-z][a-z\s]*))?/);
-    if(numSlotRe && numSlotRe[1] !== numSlotRe[2]){
+    if(numSlotRe){
       batterIsMatch = { slot: parseInt(numSlotRe[1]) - 1, jersey: numSlotRe[2], playerName: numSlotRe[3] ? numSlotRe[3].trim() : '' };
     }
   }
