@@ -1092,6 +1092,26 @@ function selectPlay(play){
   save();buildScoresheet(team);syncAllRunButtons();updateTotalsBar(team);updateScoreBadges();closeModal();
   if(play==='out'||play==='strikeout') checkThreeOuts(team, inn);
   if(play==='homerun') checkFiveRuns(team, inn);
+  // Announce next batter — speak SYNCHRONOUSLY inside the click gesture (iOS requires this)
+  if(play && play !== ''){
+    calcNextBatterSlot(team, inn);
+    const nextSlot = state.nextBatterSlot[team];
+    const nextJersey = state.battingOrder[team][nextSlot] || String(nextSlot+1);
+    const nextName = (state.teams[team][nextSlot].name || ('number ' + nextJersey));
+    const teamLabel = getTeamName(team);
+    const spokenText = teamLabel + ', batting order position ' + (nextSlot+1) + ', ' + nextName + '.';
+    showDictationResult('▶ Next: #'+nextJersey+' '+nextName+' (slot '+(nextSlot+1)+')', '#f5a623');
+    // Speak directly — no setTimeout — while user gesture is still active
+    if(window.speechSynthesis){
+      window.speechSynthesis.cancel();
+      const utt = new SpeechSynthesisUtterance(spokenText);
+      utt.rate = 0.92; utt.pitch = 1.0; utt.volume = 1.0;
+      const voices = window.speechSynthesis.getVoices();
+      const local = voices.find(function(v){ return v.localService && v.lang.startsWith('en'); });
+      if(local) utt.voice = local;
+      window.speechSynthesis.speak(utt);
+    }
+  }
 }
 function closeModal(){document.getElementById('modalOverlay').classList.remove('open');pendingCell=null;}
 document.getElementById('modalOverlay').addEventListener('click',function(e){if(e.target===this)closeModal();});
