@@ -1777,6 +1777,23 @@ function showDictationResult(msg, color){
   }, 3000);
 }
 
+// ── Unrecognized command sound ─────────────────────────────────────────────
+function playLowBuzz(){
+  try{
+    const ctx = new (window.AudioContext||window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(120, ctx.currentTime);
+    gain.gain.setValueAtTime(0.4, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.4);
+  }catch(e){}
+}
+
 function processDictation(text, alternatives){
   document.getElementById('dictation-transcript').textContent = '"' + text + '"';
   updateListenPanel('"' + text + '"', undefined);
@@ -2118,6 +2135,7 @@ function processDictation(text, alternatives){
     }
   }
   if(!jersey){
+    playLowBuzz();
     showDictationResult('❓ No player heard — say "7 ball" or "Zeke strike"', '#f5a623');
     return;
   }
@@ -2141,6 +2159,7 @@ function processDictation(text, alternatives){
     if(CMD_MAP[tok]){ cmd = CMD_MAP[tok]; break; }
   }
   if(!cmd){
+    playLowBuzz();
     showDictationResult('❓ Heard "#' + jersey + '" but no command — say "' + jersey + ' ball" or "' + jersey + ' single"', '#f5a623');
     return;
   }
@@ -2185,8 +2204,10 @@ function processDictation(text, alternatives){
     const other = 1 - activeTeam;
     const oIdx = state.battingOrder[other].indexOf(jersey);
     if(oIdx !== -1){
+      playLowBuzz();
       showDictationResult('❓ #' + jersey + ' is on ' + (other===0?'Home':'Away') + ' tab — switch tabs first', '#f5a623');
     } else {
+      playLowBuzz();
       showDictationResult('❓ Player #' + jersey + ' not on ' + (activeTeam===0?'Home':'Away') + ' tab', '#f5a623');
     }
     return;
