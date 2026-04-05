@@ -533,16 +533,50 @@ header h1{font-size:20px;font-weight:700;color:#f5a623;}
 
 <!-- Dictation Toast -->
 <!-- Listening pill - tiny indicator while mic is active -->
-<div id="dictation-pill" style="
+<div id="dictation-pill" onclick="toggleListenPanel()" style="
   display:none;position:fixed;top:12px;right:12px;
   background:#1c1c1e;border:1.5px solid #48484a;border-radius:99px;
-  padding:5px 10px;z-index:9999;
+  padding:5px 12px;z-index:9999;cursor:pointer;
   box-shadow:0 2px 8px rgba(0,0,0,0.5);
-  display:none;align-items:center;gap:5px;font-size:12px;color:#f2f2f7;
-" id="dictation-pill">
+  align-items:center;gap:5px;font-size:12px;color:#f2f2f7;
+">
   <span style="color:#e74c3c;font-size:10px;">●</span>
   <span>🎙️</span>
   <span id="pill-transcript" style="max-width:80px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-size:11px;color:#8e8e93;"></span>
+  <span style="font-size:9px;color:#636366;">▾</span>
+</div>
+
+<!-- Expanded listening detail panel -->
+<div id="listen-panel" style="
+  display:none;position:fixed;top:52px;right:12px;
+  background:#1c1c1e;border:1.5px solid #48484a;border-radius:14px;
+  padding:12px 14px;z-index:9998;min-width:240px;max-width:88vw;
+  box-shadow:0 8px 32px rgba(0,0,0,0.7);font-size:12px;color:#f2f2f7;
+">
+  <div style="font-size:11px;color:#8e8e93;margin-bottom:6px;font-weight:600;letter-spacing:0.3px;">🎙️ LISTENING DETAILS</div>
+  <div style="margin-bottom:8px;">
+    <div style="font-size:10px;color:#636366;margin-bottom:2px;">Heard:</div>
+    <div id="panel-heard" style="font-size:12px;color:#f2f2f7;font-style:italic;min-height:16px;"></div>
+  </div>
+  <div style="margin-bottom:8px;">
+    <div style="font-size:10px;color:#636366;margin-bottom:2px;">Last result:</div>
+    <div id="panel-result" style="font-size:12px;color:#2ecc71;font-weight:700;min-height:16px;"></div>
+  </div>
+  <div style="border-top:1px solid #3a3a3c;padding-top:8px;margin-top:4px;">
+    <div style="font-size:10px;color:#636366;margin-bottom:4px;">Voice Commands:</div>
+    <div style="font-size:10px;color:#aeaeb2;line-height:1.8;">
+      <span style="color:#f5a623;">Plays:</span> "7 single" · "12 ball" · "9 out"<br>
+      <span style="color:#f5a623;">Name:</span> "Zeke strike" · "Smith ball"<br>
+      <span style="color:#2ecc71;">Score:</span> "what's the score"<br>
+      <span style="color:#2ecc71;">Outs:</span> "how many outs"<br>
+      <span style="color:#9b59b6;">Pitcher:</span> "pitcher 11" · "new pitcher 22"<br>
+      <span style="color:#3498db;">Order:</span> "first batter is number 5"<br>
+      <span style="color:#e74c3c;">Count:</span> "what's the count"
+    </div>
+  </div>
+  <div style="text-align:right;margin-top:8px;">
+    <span onclick="toggleListenPanel()" style="font-size:10px;color:#636366;cursor:pointer;">✕ close</span>
+  </div>
 </div>
 
 <!-- Result toast - shown briefly on command result -->
@@ -882,7 +916,7 @@ function buildScoresheet(team){
     numD.className='jersey-input';
     numD.type='text';numD.maxLength=2;numD.placeholder='#';
     numD.value=state.teams[team][p].jersey||'';
-    numD.addEventListener('input',(function(pi){return function(e){
+    numD.addEventListener('input',(function(pi, slotIdx){return function(e){
       const newJersey = e.target.value.trim();
       if(newJersey !== ''){
         // If another player already has this jersey, clear theirs (swap in battingOrder too)
@@ -909,8 +943,10 @@ function buildScoresheet(team){
         const oldSlot2 = state.battingOrder[team].indexOf(state.teams[team][pi].jersey||'__NONE__');
         if(oldSlot2 !== -1) state.battingOrder[team][oldSlot2] = newJersey;
       }
+      // Directly stamp the known slot — avoids indexOf race when target jersey was just displaced
+      state.battingOrder[team][slotIdx] = newJersey;
       save(); buildLineupCards(); buildScoresheet(team);
-    };})(p));
+    };})(p, slot));
     const nameIn=document.createElement('input');
     const isNextUp = (slot === state.nextBatterSlot[team] && slot < 9);
     nameIn.className='player-name-input'+(isNextUp?' next-up-input':'');
@@ -1679,6 +1715,22 @@ function initDictation(){
   return true;
 }
 
+let listenPanelOpen = false;
+function toggleListenPanel(){
+  listenPanelOpen = !listenPanelOpen;
+  const panel = document.getElementById('listen-panel');
+  panel.style.display = listenPanelOpen ? 'block' : 'none';
+}
+function updateListenPanel(heard, result){
+  if(heard !== undefined){
+    const el = document.getElementById('panel-heard');
+    if(el) el.textContent = heard;
+  }
+  if(result !== undefined){
+    const el = document.getElementById('panel-result');
+    if(el) el.textContent = result;
+  }
+}
 function toggleDictation(){
   if(dictationActive){ stopDictation(); }
   else { startDictation(); }
@@ -1699,6 +1751,7 @@ function startDictation(){
 }
 
 function stopDictation(){
+  if(listenPanelOpen){ listenPanelOpen = false; document.getElementById('listen-panel').style.display='none'; }
   dictationActive = false;
   try{ recognition.stop(); }catch(e){}
   document.getElementById('nav-mic').classList.remove('recording');
@@ -1716,6 +1769,7 @@ function showDictationResult(msg, color){
   const pill = document.getElementById('dictation-pill');
   el.style.color = color;
   el.textContent = msg;
+  updateListenPanel(undefined, msg);
   toast.style.display = 'block';
   toast.style.opacity = '1';
   if(_toastTimer) clearTimeout(_toastTimer);
@@ -1734,6 +1788,7 @@ function showDictationResult(msg, color){
 
 function processDictation(text, alternatives){
   document.getElementById('dictation-transcript').textContent = '"' + text + '"';
+  updateListenPanel('"' + text + '"', undefined);
 
   let raw = text.toLowerCase().trim();
   const rawOriginal = raw; // preserve before W2N substitution
@@ -1954,7 +2009,7 @@ function processDictation(text, alternatives){
   }
 
   // ── "how many outs" ──────────────────────────────────────────────────────
-  if(raw.match(/how many outs?|how many doubt|many out|out count|outs? count|count outs?|outs? in (?:the )?inning|number of outs?/)){
+  if(raw.match(/how many outs?|how many doubt|how many ounce|many out|out count|outs? count|count outs?|outs? in (?:the )?inning|number of outs?/)){
     const team = voiceTeam;
     const inn = activeInning[team];
     const outs = state.teams[team].reduce(function(n, pl){
