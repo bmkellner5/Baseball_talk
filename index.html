@@ -923,6 +923,7 @@ function buildScoresheet(team){
         for(let qi=0; qi<PLAYERS; qi++){
           if(qi !== slotIdx && state.teams[team][qi].jersey === newJersey){
             state.teams[team][qi].jersey = oldJersey;
+            state.teams[team][qi].name = '';
             state.battingOrder[team][qi] = oldJersey;
             break;
           }
@@ -1832,22 +1833,21 @@ function processDictation(text, alternatives){
     const jersey = batterIsMatch.jersey;
     if(slot >= 0 && slot < PLAYERS){
       const team = voiceTeam;
-      // Check if jersey already exists in another slot → swap
+      // If jersey exists on a DIFFERENT slot, displace it — clear name, no carry-over
       const existingSlot = state.battingOrder[team].indexOf(jersey);
       if(existingSlot !== -1 && existingSlot !== slot){
-        // Swap: move displaced jersey to the slot being vacated
         const displaced = state.battingOrder[team][slot];
         state.battingOrder[team][existingSlot] = displaced;
+        state.teams[team][existingSlot].jersey = displaced;
+        state.teams[team][existingSlot].name = '';
       }
+      // Write jersey + name directly to target slot (also fixes same-slot same-jersey case)
       state.battingOrder[team][slot] = jersey;
-      // Update Ptr# and name for new player in this slot
-      const pIdx = state.teams[team].findIndex(function(p){ return p.jersey === jersey; });
-      if(pIdx !== -1){
-        if(batterIsMatch.playerName) state.teams[team][pIdx].name = toTitleCase(batterIsMatch.playerName);
-        if(state.activePitcher[team]){
-          for(let i = activeInning[team]; i < INNINGS; i++)
-            state.teams[team][pIdx].innings[i].pitcherJersey = state.activePitcher[team];
-        }
+      state.teams[team][slot].jersey = jersey;
+      if(batterIsMatch.playerName) state.teams[team][slot].name = toTitleCase(batterIsMatch.playerName);
+      if(state.activePitcher[team]){
+        for(let i = activeInning[team]; i < INNINGS; i++)
+          state.teams[team][slot].innings[i].pitcherJersey = state.activePitcher[team];
       }
       save(); buildLineupCards();
       buildScoresheet(team); syncAllRunButtons(); updateTotalsBar(team);
@@ -1872,8 +1872,8 @@ function processDictation(text, alternatives){
         state.battingOrder[voiceTeam][existingSlot] = displaced;
       }
       state.battingOrder[voiceTeam][slot] = jersey;
-      const pIdx = state.teams[voiceTeam].findIndex(function(p){ return p.jersey === jersey; });
-      if(pIdx !== -1 && state.activePitcher[voiceTeam]){
+      state.teams[voiceTeam][slot].jersey = jersey;
+      if(state.activePitcher[voiceTeam]){
         for(let i = activeInning[voiceTeam]; i < INNINGS; i++)
           state.teams[voiceTeam][pIdx].innings[i].pitcherJersey = state.activePitcher[voiceTeam];
       }
@@ -1929,9 +1929,7 @@ function processDictation(text, alternatives){
       // Try player name match (case-insensitive)
       const nameLower = val.toLowerCase();
       for(let slot = 0; slot < 9; slot++){
-        const jersey = state.battingOrder[team][slot];
-        const pIdx = state.teams[team].findIndex(function(p){ return p.jersey === jersey; });
-        if(pIdx !== -1 && state.teams[team][pIdx].name.toLowerCase().indexOf(nameLower) !== -1) return slot;
+        if(state.teams[team][slot].name.toLowerCase().indexOf(nameLower) !== -1) return slot;
       }
       return -1;
     }
@@ -1962,8 +1960,8 @@ function processDictation(text, alternatives){
     const inn = activeInning[team];
     const slot = state.nextBatterSlot[team];
     const jersey = state.battingOrder[team][slot];
-    const pIdx = state.teams[team].findIndex(function(p){ return p.jersey === jersey; });
-    if(pIdx === -1){ showDictationResult('⚠️ No current batter set', '#e74c3c'); return; }
+    const pIdx = slot;
+    if(pIdx < 0 || pIdx >= PLAYERS){ showDictationResult('⚠️ No current batter set', '#e74c3c'); return; }
     const pl = state.teams[team][pIdx];
     const balls = pl.innings[inn].balls || 0;
     const strikes = pl.innings[inn].strikes || 0;
@@ -2176,10 +2174,12 @@ function processDictation(text, alternatives){
 
   // Batter command
   const inn = activeInning[activeTeam];
-  let pIdx = state.teams[activeTeam].findIndex(function(p){ return p.jersey === jersey; });
+  // Find player slot by jersey label — slot IS the array index
+  let pIdx = state.battingOrder[activeTeam].indexOf(jersey);
   if(pIdx === -1){
+    // Check other team
     const other = 1 - activeTeam;
-    const oIdx = state.teams[other].findIndex(function(p){ return p.jersey === jersey; });
+    const oIdx = state.battingOrder[other].indexOf(jersey);
     if(oIdx !== -1){
       showDictationResult('❓ #' + jersey + ' is on ' + (other===0?'Home':'Away') + ' tab — switch tabs first', '#f5a623');
     } else {
@@ -2418,9 +2418,7 @@ function applyActivePitcher(battingTeam, pitcherJersey, fromInning){
   state.activePitcher[battingTeam] = pitcherJersey;
   state.activePitcherFromInning[battingTeam] = fromInning;
   for(let slot=0; slot<PLAYERS; slot++){
-    const jersey = state.battingOrder[battingTeam][slot];
-    const pIdx = state.teams[battingTeam].findIndex(function(p){return p.jersey===jersey;});
-    if(pIdx === -1) continue;
+    const pIdx = slot;
     for(let i=fromInning; i<INNINGS; i++){
       // Current inning: only update if batter has no balls AND no strikes yet
       // Future innings: always set (clean slate)
@@ -2492,9 +2490,7 @@ function calcNextBatterSlot(team, fromInning){
   // Find the last slot (0-8) that had a play in fromInning
   let lastPlayed = -1;
   for(let slot = 0; slot < LINEUP; slot++){
-    const jersey = state.battingOrder[team][slot];
-    const pIdx = state.teams[team].findIndex(function(p){ return p.jersey === jersey; });
-    if(pIdx === -1) continue;
+    const pIdx = slot;
     const inn = state.teams[team][pIdx].innings[fromInning];
     if(inn.play !== '' || inn.baseOut){
       lastPlayed = slot;
@@ -2512,8 +2508,7 @@ function calcNextBatterSlot(team, fromInning){
 function getNextBatterInfo(team){
   const slot = state.nextBatterSlot[team];
   const jersey = state.battingOrder[team][slot];
-  const pIdx = state.teams[team].findIndex(function(p){ return p.jersey === jersey; });
-  const name = pIdx !== -1 && state.teams[team][pIdx].name ? state.teams[team][pIdx].name : '';
+  const name = state.teams[team][slot].name || '';
   return { slot: slot, jersey: jersey, name: name };
 }
 
@@ -2611,17 +2606,14 @@ function announceNextBatter(team, inning){
   const LINEUP = 9;
   let lastPlayed = -1;
   for(let slot = 0; slot < LINEUP; slot++){
-    const jersey = state.battingOrder[team][slot];
-    const pIdx = state.teams[team].findIndex(function(p){ return p.jersey === jersey; });
-    if(pIdx === -1) continue;
+    const pIdx = slot;
     const inn = state.teams[team][pIdx].innings[inning];
     if(inn.play !== '' || inn.baseOut){ lastPlayed = slot; }
   }
   if(lastPlayed === -1) return;
   const nextSlot = (lastPlayed + 1) % LINEUP;
   const nextJersey = state.battingOrder[team][nextSlot];
-  const pIdx2 = state.teams[team].findIndex(function(p){ return p.jersey === nextJersey; });
-  const nextName = (pIdx2 !== -1 && state.teams[team][pIdx2].name) ? state.teams[team][pIdx2].name : 'number '+nextJersey;
+  const nextName = state.teams[team][nextSlot].name || ('number ' + nextJersey);
   const teamLabel = getTeamName(team);
   // Update visual highlight
   state.nextBatterSlot[team] = nextSlot;
