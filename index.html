@@ -1092,6 +1092,7 @@ function selectPlay(play){
   save();buildScoresheet(team);syncAllRunButtons();updateTotalsBar(team);updateScoreBadges();closeModal();
   if(play==='out'||play==='strikeout') checkThreeOuts(team, inn);
   if(play==='homerun') checkFiveRuns(team, inn);
+  if(play && play !== '') { calcNextBatterSlot(team, inn); announceNextBatter(team, inn); }
 }
 function closeModal(){document.getElementById('modalOverlay').classList.remove('open');pendingCell=null;}
 document.getElementById('modalOverlay').addEventListener('click',function(e){if(e.target===this)closeModal();});
