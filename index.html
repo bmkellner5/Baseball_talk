@@ -1093,7 +1093,13 @@ function selectPlay(play){
   if(play==='out'||play==='strikeout') checkThreeOuts(team, inn);
   if(play==='homerun') checkFiveRuns(team, inn);
   // Announce next batter — speak SYNCHRONOUSLY inside the click gesture (iOS requires this)
-  if(play && play !== ''){
+  // Count outs in this inning — if 3, the inning is over, skip announcement
+  const outsNow = state.teams[team].reduce(function(n, pl){
+    const p = pl.innings[inn].play;
+    const bo = pl.innings[inn].baseOut || false;
+    return n + (p === 'out' || p === 'strikeout' || bo ? 1 : 0);
+  }, 0);
+  if(play && play !== '' && outsNow < 3){
     calcNextBatterSlot(team, inn);
     const nextSlot = state.nextBatterSlot[team];
     const nextJersey = state.battingOrder[team][nextSlot] || String(nextSlot+1);
