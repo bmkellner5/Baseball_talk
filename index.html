@@ -1092,7 +1092,6 @@ function selectPlay(play){
   save();buildScoresheet(team);syncAllRunButtons();updateTotalsBar(team);updateScoreBadges();closeModal();
   if(play==='out'||play==='strikeout') checkThreeOuts(team, inn);
   if(play==='homerun') checkFiveRuns(team, inn);
-  if(play && play !== '') { calcNextBatterSlot(team, inn); announceNextBatter(team, inn); }
 }
 function closeModal(){document.getElementById('modalOverlay').classList.remove('open');pendingCell=null;}
 document.getElementById('modalOverlay').addEventListener('click',function(e){if(e.target===this)closeModal();});
@@ -2645,10 +2644,12 @@ function announceNextBatter(team, inning){
   state.nextBatterSlot[team] = nextSlot;
   save();
   buildScoresheet(team);
-  // Show toast update
+  // Show toast + speak the next batter
+  const spokenText = teamLabel + ', batting order position ' + (nextSlot+1) + ', ' + nextName + '.';
   setTimeout(function(){
     showDictationResult('▶ Next: #'+nextJersey+' '+nextName+' ('+teamLabel+' slot '+(nextSlot+1)+')', '#f5a623');
-  }, 1200);
+    speakText(spokenText);
+  }, 400);
 }
 
 
