@@ -907,8 +907,7 @@ function buildScoresheet(team){
   for(let slot=0;slot<PLAYERS;slot++){
     // Render in batting order sequence: find player by jersey from battingOrder
     const orderJersey = state.battingOrder[team][slot];
-    let p = state.teams[team].findIndex(function(pl){return pl.jersey===orderJersey;});
-    if(p===-1) p=slot; // fallback to slot index if jersey not found
+    const p = slot; // slot IS the player index — jersey is just a display label
     const row=document.createElement('div');
     const isNextUpRow = (slot === state.nextBatterSlot[team] && slot < 9);
     row.className='row-grid player-row'+(isNextUpRow?' next-up-row':'');
@@ -916,37 +915,24 @@ function buildScoresheet(team){
     numD.className='jersey-input';
     numD.type='text';numD.maxLength=2;numD.placeholder='#';
     numD.value=state.teams[team][p].jersey||'';
-    numD.addEventListener('input',(function(pi, slotIdx){return function(e){
+    numD.addEventListener('input',(function(slotIdx){return function(e){
       const newJersey = e.target.value.trim();
-      if(newJersey !== ''){
-        // If another player already has this jersey, clear theirs (swap in battingOrder too)
+      const oldJersey = state.teams[team][slotIdx].jersey || '';
+      if(newJersey !== '' && newJersey !== oldJersey){
+        // If another slot has this jersey label, swap — give that slot our old jersey
         for(let qi=0; qi<PLAYERS; qi++){
-          if(qi !== pi && state.teams[team][qi].jersey === newJersey){
-            state.teams[team][qi].jersey = '';
-            // Update battingOrder: replace newJersey slot with displaced jersey
-            const newSlot = state.battingOrder[team].indexOf(newJersey);
-            const oldSlot = state.battingOrder[team].indexOf(state.teams[team][pi].jersey||'');
-            if(newSlot !== -1 && oldSlot !== -1 && newSlot !== oldSlot){
-              state.battingOrder[team][newSlot] = state.teams[team][pi].jersey||'';
-            } else if(newSlot !== -1){
-              state.battingOrder[team][newSlot] = '';
-            }
+          if(qi !== slotIdx && state.teams[team][qi].jersey === newJersey){
+            state.teams[team][qi].jersey = oldJersey;
+            state.battingOrder[team][qi] = oldJersey;
             break;
           }
         }
       }
-      state.teams[team][pi].jersey = newJersey;
-      // Update battingOrder slot for this player
-      const mySlot = state.battingOrder[team].indexOf(newJersey);
-      if(mySlot === -1){
-        // Not in order yet - find slot by old jersey or assign to first empty
-        const oldSlot2 = state.battingOrder[team].indexOf(state.teams[team][pi].jersey||'__NONE__');
-        if(oldSlot2 !== -1) state.battingOrder[team][oldSlot2] = newJersey;
-      }
-      // Directly stamp the known slot — avoids indexOf race when target jersey was just displaced
+      // Always update this slot's jersey label and battingOrder directly by slot index
+      state.teams[team][slotIdx].jersey = newJersey;
       state.battingOrder[team][slotIdx] = newJersey;
       save(); buildLineupCards(); buildScoresheet(team);
-    };})(p, slot));
+    };})(slot));
     const nameIn=document.createElement('input');
     const isNextUp = (slot === state.nextBatterSlot[team] && slot < 9);
     nameIn.className='player-name-input'+(isNextUp?' next-up-input':'');
@@ -2369,9 +2355,8 @@ function buildBatterPane(team){
   const container = document.getElementById('batter-stats-'+team) || document.getElementById('batters-pane-'+team);
   container.innerHTML='';
   const isAway = team===1;
-  const _battingSeq=state.battingOrder[team].map(j=>state.teams[team].findIndex(pl=>pl.jersey===j));
+  const _battingSeq=state.battingOrder[team].map((_,slotI)=>slotI);
   _battingSeq.forEach((p)=>{
-    if(p===-1) return;
     const pl=state.teams[team][p];
     const stats = calcBatterStats(team,p);
     const card = document.createElement('div');
@@ -2473,8 +2458,8 @@ function buildLineupCard(team){
     '</div>';
   for(let slot=0; slot<PLAYERS; slot++){
     const jersey = state.battingOrder[team][slot];
-    const pIdx = state.teams[team].findIndex(p=>p.jersey===jersey);
-    const player = pIdx>=0 ? state.teams[team][pIdx] : null;
+    const pIdx = slot; // slot IS the array index
+    const player = state.teams[team][pIdx] || null;
     const name = player ? (player.name||'#'+jersey) : '—';
     const inn = activeInning[team];
     const ptr = player ? (state.teams[team][pIdx].innings[inn].pitcherJersey||'—') : '—';
